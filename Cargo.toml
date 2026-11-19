@@ -1,0 +1,23 @@
+[workspace]
+members = ["crates/bowen-api", "crates/bowen-domain", "crates/bowen-cli", "crates/bowen-playback", "crates/bowen-app", "crates/bowen-storage", "crates/bowen-gpui"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.90"
+license = "GPL-3.0-or-later"
+
+[workspace.dependencies]
+bowen-domain = { path = "crates/bowen-domain" }
+bowen-api = { path = "crates/bowen-api" }
+bowen-playback = { path = "crates/bowen-playback" }
+bowen-app = { path = "crates/bowen-app" }
+bowen-storage = { path = "crates/bowen-storage" }
+md5 = "0.8.1"
+base64 = "0.22.1"
+libloading = "0.8.9"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "gzip", "multipart"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+thiserror = "2.0.18"
+tokio = { version = "1.52.1", features = ["macros", "rt", "time"] }

@@ -1,0 +1,531 @@
+//! GPUI desktop shell.
+mod account_page;
+mod appearance;
+mod artwork_cache;
+mod catalog_views;
+mod color_wheel;
+mod comment_image;
+mod desktop_lyrics;
+mod floating_windows;
+mod input;
+mod lyric_page;
+mod lyric_poster;
+mod mini_player;
+mod month_page;
+mod mv_page;
+mod playlist_ui;
+mod search_view;
+mod shell_browse;
+mod shell_browse_rows;
+mod shell_comments;
+mod shell_content;
+mod shell_effects;
+mod shell_events;
+mod shell_header;
+mod shell_lyrics;
+mod shell_overlays;
+mod shell_player_bar;
+mod shell_playlist_form;
+mod shell_quality;
+mod shell_queue;
+mod shell_render;
+mod shortcut_page;
+#[cfg(windows)]
+mod windows_media;
+#[cfg(windows)]
+mod windows_tray;
+
+use artwork_cache::ArtworkCache;
+use bowen_app::batch_playlist::BatchProgress;
+use bowen_app::browse::{BrowseContent, BrowseView, CollectionState, DetailView, SearchKind};
+use bowen_app::comments::CommentsView;
+use bowen_app::desktop_service::{
+    AccountEntry, AudioEffectAction, AuthView, BatchSource, Command, Event, LyricsView, PlayerView,
+    PlaylistMutationResult, PlaylistPickerView, QrView, SearchSection, Service,
+};
+use bowen_app::home::HomeView;
+use bowen_app::library::{LibrarySort, LibraryView};
+use bowen_app::likes::{LikeState, LikeView};
+use bowen_app::playback::QueueEdit;
+use bowen_app::playlist_cover::{CoverCrop, CoverEdit, CoverImage};
+use bowen_domain::catalog::{CategoryGroup, PlaylistCategory};
+use bowen_domain::comments::CommentSort;
+use bowen_domain::discovery::HomeContent;
+use bowen_domain::track::Track;
+use bowen_playback::mpv::PlaybackState;
+use gpui::{
+    App, Application, Bounds, ClipboardItem, Context, Entity, Focusable, Image, ImageFormat,
+    KeyBinding, MouseButton, PathPromptOptions, Pixels, Point, ScrollHandle, Window, WindowBounds,
+    WindowOptions, actions, canvas, div, prelude::*, px, size,
+};
+use input::TextInput;
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+actions!(bowen, [Search]);
+
+enum QrDisplay {
+    Idle,
+    Loading,
+    Ready { width: usize, modules: Vec<bool> },
+    Expired,
+    Failed,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Page {
+    Home,
+    Library,
+    Overview,
+    Tracks,
+    PlaylistSearch,
+    PlaylistSquare,
+    AlbumSearch,
+    ArtistSearch,
+    Mine,
+    Collection,
+    Charts,
+    Recent,
+    AccountOverview,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PlaylistDialog {
+    Closed,
+    Create,
+    EditLoading(i64),
+    Edit(i64),
+    Delete(i64),
+}
+
+type CommentDraftKey = (u64, i64, i64, i64);
+
+fn comment_draft_key(view: &CommentsView) -> Option<CommentDraftKey> {
+    Some((
+        view.account_revision?,
+        view.track_id?,
+        view.root.as_ref().map_or(0, |root| root.id),
+        view.reply_target.as_ref().map_or(0, |target| target.0),
+    ))
+}
+
+struct MusicApp {
+    appearance_page: appearance::AppearancePage,
+    shortcuts: shortcut_page::ShortcutPage,
+    playback_focus: gpui::FocusHandle,
+    comment_image: comment_image::CommentImage,
+    account_overview_generation: u64,
+    account_overview: Option<Box<Result<bowen_domain::account::AccountOverview, ()>>>,
+    month_page: month_page::MonthPage,
+    mv_page: mv_page::MvPage,
+    overview_generation: u64,
+    overview_query: String,
+    overview_result: Option<Result<Vec<SearchSection>, ()>>,
+    overview_detail_open: bool,
+    artwork: RefCell<ArtworkCache>,
+    home: Option<HomeView>,
+    home_playlist_open: bool,
+    library: Option<LibraryView>,
+    library_album_open: bool,
+    input: Entity<TextInput>,
+    suggestion_query: Option<String>,
+    suggestion_generation: u64,
+    search_suggestions: Vec<String>,
+    show_hot_words: bool,
+    show_search_history: bool,
+    search_history: Option<Result<Vec<String>, String>>,
+    confirm_clear_search_history: bool,
+    hot_words: Option<Vec<String>>,
+    hot_words_loading: bool,
+    phone_input: Entity<TextInput>,
+    code_input: Entity<TextInput>,
+    preset_name_input: Entity<TextInput>,
+    preset_description_input: Entity<TextInput>,
+    playlist_name_input: Entity<TextInput>,
+    playlist_description_input: Entity<TextInput>,
+    comment_input: Entity<TextInput>,
+    comments: Option<CommentsView>,
+    comment_drafts: HashMap<CommentDraftKey, String>,
+    submitted_comment: Option<(u64, CommentDraftKey, String)>,
+    comment_anonymous: bool,
+    playlist_dialog: PlaylistDialog,
+    playlist_private: bool,
+    playlist_busy: bool,
+    playlist_category_groups: Option<Vec<CategoryGroup>>,
+    playlist_original_categories: Vec<PlaylistCategory>,
+    playlist_selected_categories: Vec<i32>,
+    playlist_cover_path: Option<PathBuf>,
+    playlist_cover_image: Option<Arc<CoverImage>>,
+    playlist_cover_preview: Option<Arc<Image>>,
+    playlist_cover_crop: CoverCrop,
+    playlist_cover_loading: bool,
+    playlist_cover_request: u64,
+    playlist_cover_drag: Option<Point<Pixels>>,
+    playlist_editor_generation: u64,
+    track_picker: Option<PlaylistPickerView>,
+    batch_selection: HashSet<(usize, i64)>,
+    batch_generation: Option<BatchSource>,
+    search_generation: u64,
+    history_generation: u64,
+    batch_remove_confirm: bool,
+    batch_progress: Option<BatchProgress>,
+    clear_queue_pending: Option<(u64, u64)>,
+    service: Service,
+    mini_player: Option<gpui::WindowHandle<mini_player::MiniPlayer>>,
+    desktop_lyrics: Option<gpui::WindowHandle<desktop_lyrics::DesktopLyrics>>,
+    floating_windows: floating_windows::FloatingPreferences,
+    #[cfg(windows)]
+    legacy_floating_windows: bowen_app::desktop_service::LegacyFloatingWindows,
+    #[cfg(windows)]
+    desktop_lyrics_locked: bool,
+    tracks: Vec<Track>,
+    recent_tracks: Vec<Track>,
+    recent_loading: bool,
+    recent_error: Option<String>,
+    has_more: bool,
+    search_loading: bool,
+    status: String,
+    player: Option<PlayerView>,
+    #[cfg(windows)]
+    windows_media: Option<windows_media::WindowsMedia>,
+    #[cfg(windows)]
+    windows_tray: Option<windows_tray::WindowsTray>,
+    #[cfg(target_os = "linux")]
+    linux_tray_available: std::rc::Rc<std::cell::Cell<bool>>,
+    like: LikeView,
+    lyrics: LyricsView,
+    show_lyrics: bool,
+    show_effects: bool,
+    show_quality: bool,
+    show_comments: bool,
+    lyric_scroll: ScrollHandle,
+    lyric_page: lyric_page::LyricPage,
+    lyric_poster: lyric_poster::PosterPage,
+    lyric_line: Option<usize>,
+    manual_scroll_until: Option<Instant>,
+    auth: AuthView,
+    remembered_accounts: Vec<AccountEntry>,
+    account_cleanup_pending: bool,
+    forget_pending: Option<String>,
+    adding_account: bool,
+    show_account: bool,
+    show_qr: bool,
+    qr: QrDisplay,
+    page: Page,
+    collection_kind: SearchKind,
+    browse: Option<BrowseView>,
+}
+
+impl MusicApp {
+    fn new(service: Service, cx: &mut Context<Self>) -> Self {
+        let input = cx.new(TextInput::new);
+        cx.observe(&input, |this, _, cx| this.search_input_changed(cx))
+            .detach();
+        let phone_input = cx.new(|cx| TextInput::with_placeholder(cx, "手机号"));
+        let code_input = cx.new(|cx| TextInput::with_placeholder(cx, "短信验证码"));
+        let preset_name_input = cx.new(|cx| TextInput::with_placeholder(cx, "自定义预设名称"));
+        let preset_description_input = cx.new(|cx| TextInput::with_placeholder(cx, "说明（可选）"));
+        let playlist_name_input = cx.new(|cx| TextInput::with_placeholder(cx, "歌单名称"));
+        let playlist_description_input = cx.new(|cx| TextInput::with_placeholder(cx, "歌单简介"));
+        let comment_input = cx.new(|cx| TextInput::with_placeholder(cx, "写评论或回复"));
+        cx.spawn(async move |entity, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(120))
+                    .await;
+                if entity
+                    .update(cx, |this, cx| {
+                        let mut changed = false;
+                        while let Ok(event) = this.service.events.try_recv() {
+                            this.accept_event(event, cx);
+                            changed = true;
+                        }
+                        let followed = this.follow_lyrics();
+                        if changed || followed {
+                            cx.notify();
+                        }
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
+        Self {
+            appearance_page: appearance::AppearancePage::new(cx),
+            shortcuts: shortcut_page::ShortcutPage::new(cx),
+            playback_focus: cx.focus_handle(),
+            #[cfg(windows)]
+            legacy_floating_windows: Default::default(),
+            comment_image: comment_image::CommentImage::default(),
+            account_overview_generation: 0,
+            account_overview: None,
+            month_page: month_page::MonthPage::default(),
+            mv_page: mv_page::MvPage::new(cx),
+            overview_generation: 0,
+            overview_query: String::new(),
+            overview_result: None,
+            overview_detail_open: false,
+            artwork: RefCell::new(ArtworkCache::default()),
+            home: None,
+            home_playlist_open: false,
+            library: None,
+            library_album_open: false,
+            input,
+            suggestion_query: Some(String::new()),
+            suggestion_generation: 0,
+            search_suggestions: Vec::new(),
+            show_hot_words: false,
+            show_search_history: false,
+            search_history: None,
+            confirm_clear_search_history: false,
+            hot_words: None,
+            hot_words_loading: false,
+            phone_input,
+            code_input,
+            preset_name_input,
+            preset_description_input,
+            playlist_name_input,
+            playlist_description_input,
+            comment_input,
+            comments: None,
+            comment_drafts: HashMap::new(),
+            submitted_comment: None,
+            comment_anonymous: false,
+            playlist_dialog: PlaylistDialog::Closed,
+            playlist_private: false,
+            playlist_busy: false,
+            playlist_category_groups: None,
+            playlist_original_categories: Vec::new(),
+            playlist_selected_categories: Vec::new(),
+            playlist_cover_path: None,
+            playlist_cover_image: None,
+            playlist_cover_preview: None,
+            playlist_cover_crop: CoverCrop::default(),
+            playlist_cover_loading: false,
+            playlist_cover_request: 0,
+            playlist_cover_drag: None,
+            playlist_editor_generation: 0,
+            track_picker: None,
+            batch_selection: HashSet::new(),
+            batch_generation: None,
+            search_generation: 0,
+            history_generation: 0,
+            batch_remove_confirm: false,
+            batch_progress: None,
+            clear_queue_pending: None,
+            service,
+            mini_player: None,
+            desktop_lyrics: None,
+            #[cfg(windows)]
+            windows_media: None,
+            #[cfg(windows)]
+            windows_tray: None,
+            #[cfg(target_os = "linux")]
+            linux_tray_available: Default::default(),
+            floating_windows: Default::default(),
+            #[cfg(windows)]
+            desktop_lyrics_locked: false,
+            tracks: Vec::new(),
+            recent_tracks: Vec::new(),
+            recent_loading: false,
+            recent_error: None,
+            has_more: false,
+            search_loading: false,
+            status: "正在启动…".into(),
+            player: None,
+            like: LikeView::default(),
+            lyrics: LyricsView::Empty,
+            show_lyrics: true,
+            show_effects: false,
+            show_quality: false,
+            show_comments: false,
+            lyric_scroll: ScrollHandle::new(),
+            lyric_page: lyric_page::LyricPage::new(cx),
+            lyric_poster: lyric_poster::PosterPage::new(cx),
+            lyric_line: None,
+            manual_scroll_until: None,
+            auth: AuthView {
+                account: None,
+                busy: true,
+                message: "正在启动…".into(),
+            },
+            remembered_accounts: Vec::new(),
+            account_cleanup_pending: false,
+            forget_pending: None,
+            adding_account: false,
+            show_account: false,
+            show_qr: false,
+            qr: QrDisplay::Idle,
+            page: Page::Overview,
+            collection_kind: SearchKind::Playlist,
+            browse: None,
+        }
+    }
+
+    fn lyric_seek_stamp(&self) -> Option<(u64, i64)> {
+        let player = self.player.as_ref()?;
+        Some((player.queue_account_revision, player.track_id?))
+    }
+
+    fn seek_lyric(&self, stamp: Option<(u64, i64)>, target: f64) {
+        if let Some((account, track)) = stamp
+            && stamp == self.lyric_seek_stamp()
+        {
+            let _ = self
+                .service
+                .commands
+                .send(Command::SeekTo(account, track, target));
+        }
+    }
+
+    fn follow_lyrics(&mut self) -> bool {
+        let LyricsView::Ready(document) = &self.lyrics else {
+            return false;
+        };
+        let position = self.player.as_ref().map_or(0, |player| player.position_ms);
+        let current = document
+            .line_at(position)
+            .and_then(|line| document.source_line(line));
+        let resumed = self
+            .manual_scroll_until
+            .is_some_and(|until| Instant::now() >= until);
+        if resumed {
+            self.manual_scroll_until = None;
+        }
+        if current != self.lyric_line || resumed {
+            self.lyric_line = current;
+            if self.show_lyrics
+                && !self.show_effects
+                && !self.show_quality
+                && self
+                    .manual_scroll_until
+                    .is_none_or(|until| Instant::now() >= until)
+                && let Some(index) = current
+            {
+                self.lyric_scroll.scroll_to_item(index);
+            }
+        }
+        self.lyric_page.follow(current) || resumed
+    }
+}
+
+fn clock(seconds: u64) -> String {
+    format!("{}:{:02}", seconds / 60, seconds % 60)
+}
+
+fn quality_name(quality: bowen_domain::track::AudioQuality) -> &'static str {
+    use bowen_domain::track::AudioQuality;
+    match quality {
+        AudioQuality::Standard => "标准",
+        AudioQuality::High => "高品",
+        AudioQuality::Lossless => "无损",
+    }
+}
+
+fn activate_main_window(window: &Window) {
+    #[cfg(windows)]
+    windows_tray::restore_hidden_window(window);
+    window.activate_window();
+}
+
+fn main() {
+    let primary = match bowen_app::instance::PrimaryInstance::start() {
+        Ok(Some(primary)) => primary,
+        Ok(None) => return,
+        Err(error) => {
+            eprintln!("无法启动波纹音乐：{error}");
+            std::process::exit(1);
+        }
+    };
+    let inbox = primary.activation_inbox();
+    let (service, placement) = Service::start();
+    Application::new().run(move |cx: &mut App| {
+        appearance::init(cx);
+        TextInput::register_bindings(cx);
+        lyric_page::register_bindings(cx);
+        lyric_poster::register_bindings(cx);
+        mv_page::register_bindings(cx);
+        cx.bind_keys([KeyBinding::new("enter", Search, None)]);
+        cx.on_window_closed(|cx| {
+            if cx.windows().is_empty() {
+                cx.quit();
+            }
+        })
+        .detach();
+        let fallback = Bounds::centered(None, size(px(1100.), px(720.)), cx);
+        let minimum = size(px(780.), px(540.));
+        let (bounds, display_id) =
+            floating_windows::restore_placement(placement.main, fallback, None, minimum, cx);
+        #[cfg(windows)]
+        let (bounds, display_id) = if placement.main.is_none() {
+            floating_windows::restore_legacy_placement(placement.legacy_main, minimum, cx)
+                .unwrap_or((bounds, display_id))
+        } else {
+            (bounds, display_id)
+        };
+        let window = cx
+            .open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    display_id,
+                    app_id: Some("io.bowenmusic.BowenRust".into()),
+                    ..Default::default()
+                },
+                |_, cx| cx.new(|cx| MusicApp::new(service, cx)),
+            )
+            .expect("failed to open main window");
+        window
+            .update(cx, |view, window, cx| {
+                window.focus(&view.input.focus_handle(cx));
+                floating_windows::observe_main_placement(window, cx);
+                appearance::observe(window, cx);
+                #[cfg(windows)]
+                {
+                    view.init_windows_media(window, cx);
+                    view.init_windows_tray(window, cx);
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    let available = view.linux_tray_available.clone();
+                    window.on_window_should_close(cx, move |window, _| {
+                        if available.get() {
+                            window.minimize_window();
+                            false
+                        } else {
+                            true
+                        }
+                    });
+                }
+                cx.activate(true);
+            })
+            .expect("failed to initialize main window");
+        cx.spawn(async move |cx| {
+            loop {
+                let inbox = inbox.clone();
+                let requested = cx
+                    .background_executor()
+                    .spawn(async move { inbox.take_request() })
+                    .await;
+                if matches!(requested, Ok(true))
+                    && window
+                        .update(cx, |_, window, _| activate_main_window(window))
+                        .is_err()
+                {
+                    break;
+                }
+                cx.background_executor()
+                    .timer(Duration::from_millis(250))
+                    .await;
+            }
+        })
+        .detach();
+    });
+    drop(primary);
+}
