@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=bo_music
+Name[zh_CN]=bo_music
+Exec=bo_music
+Icon=bo_music
+Terminal=false
+Categories=AudioVideo;Audio;Player;

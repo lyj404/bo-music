@@ -682,11 +682,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "bowen-api"
+name = "bo_music-api"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "bowen-domain",
+ "bo_music-domain",
  "md5",
  "reqwest",
  "serde",
@@ -696,14 +696,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "bowen-app"
+name = "bo_music-app"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "bowen-api",
- "bowen-domain",
- "bowen-playback",
- "bowen-storage",
+ "bo_music-api",
+ "bo_music-domain",
+ "bo_music-playback",
+ "bo_music-storage",
  "image",
  "qrcode",
  "reqwest",
@@ -716,26 +716,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "bowen-cli"
+name = "bo_music-cli"
 version = "0.1.0"
 dependencies = [
- "bowen-api",
- "bowen-app",
- "bowen-playback",
+ "bo_music-api",
+ "bo_music-app",
+ "bo_music-playback",
  "tokio",
 ]
 
 [[package]]
-name = "bowen-domain"
+name = "bo_music-domain"
 version = "0.1.0"
 
 [[package]]
-name = "bowen-gpui"
+name = "bo_music"
 version = "0.1.0"
 dependencies = [
- "bowen-app",
- "bowen-domain",
- "bowen-playback",
+ "bo_music-app",
+ "bo_music-domain",
+ "bo_music-playback",
  "gpui",
  "image",
  "qrcode",
@@ -747,10 +747,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "bowen-playback"
+name = "bo_music-playback"
 version = "0.1.0"
 dependencies = [
- "bowen-domain",
+ "bo_music-domain",
  "libc",
  "libloading",
  "thiserror 2.0.20",
@@ -758,10 +758,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "bowen-storage"
+name = "bo_music-storage"
 version = "0.1.0"
 dependencies = [
- "bowen-domain",
+ "bo_music-domain",
  "getrandom 0.4.3",
  "keyring",
  "serde",
@@ -3150,9 +3150,9 @@ checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
 
 [[package]]
 name = "libc"
-version = "0.2.190"
+version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
+checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
 name = "libdbus-sys"

@@ -1,0 +1,12 @@
+[package]
+name = "bo_music-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bo_music-api.workspace = true
+bo_music-app.workspace = true
+bo_music-playback.workspace = true
+tokio.workspace = true

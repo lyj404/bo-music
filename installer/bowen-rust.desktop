@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Bowen Music (Rust)
-Name[zh_CN]=波纹音乐（Rust）
-Exec=bowen-gpui
-Icon=bowen-rust
-Terminal=false
-Categories=AudioVideo;Audio;Player;

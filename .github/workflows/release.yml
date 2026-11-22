@@ -1,0 +1,193 @@
+name: Build and Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test release metadata and asset validation
+        run: python -m unittest discover -s tools -p test_release.py -v
+      - name: Validate release version
+        id: metadata
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: python tools/release.py metadata --tag "$RELEASE_TAG" --repository "$GITHUB_REPOSITORY"
+
+  build-windows:
+    needs: prepare
+    runs-on: windows-2022
+    env:
+      RUSTFLAGS: '-C target-feature=+crt-static'
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.90.0
+          targets: x86_64-pc-windows-msvc
+      - name: Build Windows x64
+        run: cargo build --release --locked -p bo_music --target x86_64-pc-windows-msvc
+      - name: Install Inno Setup with Simplified Chinese support
+        run: choco upgrade innosetup -y --no-progress
+      - name: Package ZIP and Simplified Chinese setup
+        shell: pwsh
+        run: ./tools/package-windows.ps1 -Version $env:RELEASE_VERSION -Binary target/x86_64-pc-windows-msvc/release/bo_music.exe
+      - name: Verify setup install and uninstall
+        shell: pwsh
+        run: |
+          $setup = Join-Path $env:GITHUB_WORKSPACE "target/dist/bo_music_${env:RELEASE_VERSION}_windows_x64_setup.exe"
+          $installDir = Join-Path $env:RUNNER_TEMP 'bo_music-install-test'
+          $process = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$installDir") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installation failed: $($process.ExitCode)" }
+          foreach ($file in @('bo_music.exe', 'libmpv-2.dll', 'unins000.exe')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $installDir $file))) { throw "Installed file missing: $file" }
+          }
+          $process = Start-Process -FilePath (Join-Path $installDir 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Uninstall failed: $($process.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          if-no-files-found: error
+          path: |
+            target/dist/*.zip
+            target/dist/*_setup.exe
+
+  build-linux:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.90.0
+          targets: x86_64-unknown-linux-gnu
+      - name: Install Linux build and package dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libfontconfig1-dev libvulkan-dev libwayland-dev libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev dpkg-dev desktop-file-utils
+      - name: Build Linux x64
+        run: cargo build --release --locked -p bo_music --target x86_64-unknown-linux-gnu
+      - name: Package tar.gz and DEB
+        run: sh tools/package-rust-linux.sh target/x86_64-unknown-linux-gnu/release/bo_music target/dist "$RELEASE_VERSION"
+      - name: Generate AUR package and checksums
+        run: python tools/release.py aur --version "$RELEASE_VERSION" --repository "$GITHUB_REPOSITORY"
+      - name: Verify Linux packages
+        run: |
+          desktop-file-validate installer/bo_music.desktop
+          dpkg-deb --info "target/dist/bo_music_${RELEASE_VERSION}_amd64.deb"
+          sudo apt-get install -y "./target/dist/bo_music_${RELEASE_VERSION}_amd64.deb"
+          test -x /usr/bin/bo_music
+          test -f /usr/share/applications/bo_music.desktop
+          ldd /usr/bin/bo_music | tee /tmp/bo_music-ldd.txt
+          ! grep -q 'not found' /tmp/bo_music-ldd.txt
+          python -c 'import ctypes; ctypes.CDLL("libmpv.so.2")'
+          sudo apt-get remove -y bo-music
+      - name: Verify AUR metadata with makepkg
+        run: |
+          docker run --rm -v "$PWD/target/dist/aur/bo_music-bin:/pkg" archlinux:base-devel bash -c '
+            useradd -m builder
+            cd /pkg
+            chmod a+w .
+            su builder -c "makepkg --printsrcinfo" > /tmp/generated.SRCINFO
+            diff -u .SRCINFO /tmp/generated.SRCINFO
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          if-no-files-found: error
+          path: |
+            target/dist/*_linux_x64.tar.gz
+            target/dist/*_amd64.deb
+            target/dist/*_aur.tar.gz
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [prepare, build-windows, build-linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-x64'
+          path: target/dist
+          merge-multiple: true
+      - name: Verify assets and generate download links
+        run: python tools/release.py notes --version "$RELEASE_VERSION" --repository "$GITHUB_REPOSITORY"
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          IS_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          flags=()
+          if [ "$IS_PRERELEASE" = true ]; then flags+=(--prerelease); fi
+          assets=(target/dist/*.zip target/dist/*_setup.exe target/dist/*_linux_x64.tar.gz target/dist/*_amd64.deb target/dist/*_aur.tar.gz target/dist/SHA256SUMS)
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" --clobber "${assets[@]}"
+            exit 0
+          fi
+          gh release create "$RELEASE_TAG" --verify-tag --title "bo_music $RELEASE_VERSION" --generate-notes --notes-file target/dist/release-notes.md "${flags[@]}" \
+            "${assets[@]}"
+
+  publish-aur:
+    needs: [prepare, release]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check AUR configuration
+        id: configured
+        env:
+          AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
+          AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -n "$AUR_USERNAME" ] && [ -n "$AUR_EMAIL" ] && [ -n "$AUR_SSH_PRIVATE_KEY" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo '::notice::AUR upload skipped. Configure AUR_USERNAME, AUR_EMAIL and AUR_SSH_PRIVATE_KEY to enable it. The AUR source archive is available in the GitHub Release.'
+          fi
+      - uses: actions/checkout@v4
+        if: steps.configured.outputs.ready == 'true'
+      - uses: actions/download-artifact@v4
+        if: steps.configured.outputs.ready == 'true'
+        with:
+          name: linux-x64
+          path: target/dist
+      - name: Publish bo_music-bin to AUR
+        if: steps.configured.outputs.ready == 'true'
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
+          AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: bash tools/publish-aur.sh "target/dist/bo_music_${RELEASE_VERSION}_aur.tar.gz" "$RELEASE_VERSION"

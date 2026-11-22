@@ -1,5 +1,6 @@
 [workspace]
-members = ["crates/bowen-api", "crates/bowen-domain", "crates/bowen-cli", "crates/bowen-playback", "crates/bowen-app", "crates/bowen-storage", "crates/bowen-gpui"]
+default-members = ["crates/bo_music"]
+members = ["crates/bo_music-api", "crates/bo_music-domain", "crates/bo_music-cli", "crates/bo_music-playback", "crates/bo_music-app", "crates/bo_music-storage", "crates/bo_music"]
 resolver = "2"
 
 [workspace.package]
@@ -8,11 +9,11 @@ rust-version = "1.90"
 license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
-bowen-domain = { path = "crates/bowen-domain" }
-bowen-api = { path = "crates/bowen-api" }
-bowen-playback = { path = "crates/bowen-playback" }
-bowen-app = { path = "crates/bowen-app" }
-bowen-storage = { path = "crates/bowen-storage" }
+bo_music-domain = { path = "crates/bo_music-domain" }
+bo_music-api = { path = "crates/bo_music-api" }
+bo_music-playback = { path = "crates/bo_music-playback" }
+bo_music-app = { path = "crates/bo_music-app" }
+bo_music-storage = { path = "crates/bo_music-storage" }
 md5 = "0.8.1"
 base64 = "0.22.1"
 libloading = "0.8.9"
