@@ -731,7 +731,7 @@ version = "0.1.0"
 
 [[package]]
 name = "bo_music"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "bo_music-app",
  "bo_music-domain",
