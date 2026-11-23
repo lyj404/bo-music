@@ -1,4 +1,4 @@
-//! Shared visual primitives matching design/player-prototype.html.
+//! Shared visual primitives for the Fluent desktop interface.
 use gpui::{App, Div, Rgba, Stateful, Svg, div, prelude::*, px};
 use std::borrow::Cow;
 
