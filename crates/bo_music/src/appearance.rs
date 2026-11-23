@@ -6,6 +6,10 @@ use gpui::{
 };
 use std::sync::OnceLock;
 
+pub(super) const ACCENT: u32 = 0xc92a45;
+pub(super) const ACCENT_ON_DARK: u32 = 0xff7a90;
+const ACCENT_HOVER: u32 = 0xb8243d;
+
 #[derive(Default)]
 pub(super) struct Appearance {
     settings: AppearanceSettings,
@@ -64,9 +68,10 @@ fn light_color(color: u32) -> u32 {
         0x20293a => 0x202124,
         0x687083 => 0x62626c,
         0x788196 | 0x8a91a2 | 0x9ca4b4 => 0x818188,
-        0x415de5 | 0x4d66e5 | 0x354db6 => 0x6554c0,
-        0x3854d5 => 0x7664d0,
-        0xe9edff | 0xe8edff => 0xede9f8,
+        0x415de5 | 0x4d66e5 | 0x354db6 => ACCENT,
+        0x3854d5 => ACCENT_HOVER,
+        0xe9edff | 0xe8edff => 0xfce8ec,
+        0xdbe4ff => 0xf6cbd3,
         0xe9edf5 | 0xf1f3f9 | 0xeeeeee => 0xf3f3f5,
         0xd8dce6 => 0xe8e8ec,
         _ => color,
@@ -78,14 +83,15 @@ fn dark_color(light: u32) -> u32 {
         0xffffff => 0x29292d,
         0xf5f7fb => 0x202023,
         0xf1f3f9 | 0xeeeeee | 0xe9edf5 => 0x353535,
-        0xe9edff | 0xe8edff => 0x40364f,
-        0xdbe4ff => 0x43517b,
+        0xe9edff | 0xe8edff => 0x442932,
+        0xdbe4ff => 0x56303d,
         0xd8dce6 => 0x4a5469,
         0x20293a => 0xf5f5f5,
         0x687083 | 0x788196 => 0xc1cada,
         0x8a91a2 | 0x9ca4b4 | 0xaab0bd => 0xaeb9cc,
-        0x354db6 | 0x415de5 => 0xb9a5f5,
-        0x4d66e5 => 0x8a70cb,
+        0x354db6 | 0x415de5 => ACCENT_ON_DARK,
+        0x4d66e5 => ACCENT,
+        0x3854d5 => ACCENT_HOVER,
         0xc23b46 => 0xff9099,
         _ => light,
     }

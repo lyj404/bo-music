@@ -80,7 +80,7 @@ impl Render for SpectrumView {
                     .flex_1()
                     .h(px(2. + 40. * level))
                     .rounded_sm()
-                    .bg(rgb(0xaab7ff))
+                    .bg(crate::appearance::paint(cx)(0x415de5))
             }))
     }
 }
@@ -327,7 +327,7 @@ impl MusicApp {
             .child(div().flex_1())
             .when(matches!(&self.lyrics, LyricsView::Ready(_)), |row| {
                 row.child(
-                    control("lyric-poster", "歌词海报")
+                    control("lyric-poster", "歌词海报", cx)
                         .text_color(rgb(0x687083))
                         .px_2()
                         .py_1()
@@ -354,7 +354,7 @@ impl MusicApp {
                 })),
             )
             .child(
-                control("lyric-spectrum", "频谱")
+                control("lyric-spectrum", "频谱", cx)
                     .text_color(rgb(0x687083))
                     .px_2()
                     .py_1()
@@ -365,7 +365,7 @@ impl MusicApp {
             )
             .children([(-2., "A−"), (2., "A+")].into_iter().enumerate().map(
                 |(index, (delta, label))| {
-                    control(("lyric-font", index), label)
+                    control(("lyric-font", index), label, cx)
                         .text_color(rgb(0x687083))
                         .px_2()
                         .py_1()
@@ -542,11 +542,11 @@ fn ui_close(cx: &App) -> Stateful<Div> {
     crate::ui::icon_button("lyric-close", "close", cx)
 }
 
-fn control(id: impl Into<gpui::ElementId>, label: &'static str) -> Stateful<Div> {
+fn control(id: impl Into<gpui::ElementId>, label: &'static str, cx: &App) -> Stateful<Div> {
     div()
         .id(id)
         .cursor_pointer()
-        .text_color(rgb(0xaab7ff))
+        .text_color(crate::appearance::paint(cx)(0x415de5))
         .child(label)
 }
 

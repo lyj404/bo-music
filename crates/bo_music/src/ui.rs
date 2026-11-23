@@ -234,6 +234,24 @@ pub fn slider(
         )
 }
 
+pub fn logo() -> gpui::Img {
+    static IMAGE: std::sync::OnceLock<std::sync::Arc<gpui::Image>> = std::sync::OnceLock::new();
+    gpui::img(
+        IMAGE
+            .get_or_init(|| {
+                std::sync::Arc::new(gpui::Image::from_bytes(
+                    gpui::ImageFormat::Png,
+                    include_bytes!("../../../assets/bo_music.png").to_vec(),
+                ))
+            })
+            .clone(),
+    )
+    .size(px(30.))
+    .flex_shrink_0()
+    .rounded_lg()
+    .object_fit(gpui::ObjectFit::Contain)
+}
+
 pub fn hero_illustration() -> gpui::Img {
     static IMAGE: std::sync::OnceLock<std::sync::Arc<gpui::Image>> = std::sync::OnceLock::new();
     gpui::img(

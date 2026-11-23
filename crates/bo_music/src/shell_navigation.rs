@@ -64,18 +64,7 @@ impl MusicApp {
                     .gap_3()
                     .px_3()
                     .pb_6()
-                    .child(
-                        div()
-                            .size(px(30.))
-                            .rounded_lg()
-                            .bg(rgb(0x4d66e5))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_color(gpui::rgb(0xffffff))
-                            .text_xl()
-                            .child("≈"),
-                    )
+                    .child(ui::logo())
                     .child(
                         div()
                             .text_lg()

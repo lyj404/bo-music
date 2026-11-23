@@ -168,7 +168,7 @@ impl MiniPlayer {
                     .px_2()
                     .py_1()
                     .text_color(rgb(if player.selected == Some(index) {
-                        0xaab7ff
+                        crate::appearance::ACCENT_ON_DARK
                     } else {
                         0xf8f9ff
                     }))
@@ -207,7 +207,7 @@ impl MiniPlayer {
                     if playing { "pause" } else { "play" },
                     if playing { "暂停" } else { "播放" },
                 )
-                .bg(rgb(0x415de5))
+                .bg(rgb(crate::appearance::ACCENT))
                 .on_click(cx.listener(|this, _, _, cx| this.send(Command::Toggle, cx))),
             )
             .child(
@@ -389,7 +389,7 @@ impl Render for MiniPlayer {
                                     .w(gpui::relative(progress))
                                     .h_full()
                                     .rounded_sm()
-                                    .bg(rgb(0x8192ff)),
+                                    .bg(rgb(crate::appearance::ACCENT_ON_DARK)),
                             ),
                     )
                     .child(div().text_color(rgb(0xb9c4df)).child(format!(
