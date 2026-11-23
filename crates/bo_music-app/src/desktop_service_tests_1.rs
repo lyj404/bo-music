@@ -499,7 +499,8 @@ fn searches_resolves_plays_and_saves_queue_with_local_services() {
                 format!(r#"{{"code":200,"data":{{"audioUrl":"http://{address}/audio.wav","format":"mp3","bitrate":128}}}}"#).into_bytes()
             } else if request.starts_with("GET /mobi.s?") {
                 assert!(!request.to_ascii_lowercase().contains("\r\nuid:"));
-                br#"{"code":200,"data":{"content":"WzAwOjAwLjAwXUJvd2Vu"}}"#.to_vec()
+                // Base64-encoded "[00:00.00]bo_music".
+                br#"{"code":200,"data":{"content":"WzAwOjAwLjAwXWJvX211c2lj"}}"#.to_vec()
             } else if request.starts_with("GET /audio.wav") {
                 wav.clone()
             } else {

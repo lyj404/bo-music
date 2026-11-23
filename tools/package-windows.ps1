@@ -22,8 +22,8 @@ $isccCommand = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 if ($isccCommand) { $candidates += $isccCommand.Source }
 $iscc = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (-not $iscc) { throw 'Install Inno Setup 6.5 or newer before packaging.' }
-$languageFile = Join-Path (Split-Path $iscc -Parent) 'Languages/ChineseSimplified.isl'
-if (-not (Test-Path -LiteralPath $languageFile)) { throw 'The Inno Setup Simplified Chinese translation is missing. Upgrade Inno Setup.' }
+$languageFile = Join-Path $root 'installer/languages/ChineseSimplified.isl'
+if (-not (Test-Path -LiteralPath $languageFile -PathType Leaf)) { throw "The bundled Inno Setup Simplified Chinese translation is missing: $languageFile" }
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 $output = (Resolve-Path -LiteralPath $OutputDirectory).Path
 $name = "bo_music_${Version}_windows_x64"

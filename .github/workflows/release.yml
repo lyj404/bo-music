@@ -46,7 +46,7 @@ jobs:
           targets: x86_64-pc-windows-msvc
       - name: Build Windows x64
         run: cargo build --release --locked -p bo_music --target x86_64-pc-windows-msvc
-      - name: Install Inno Setup with Simplified Chinese support
+      - name: Install Inno Setup compiler
         run: choco upgrade innosetup -y --no-progress
       - name: Package ZIP and Simplified Chinese setup
         shell: pwsh
