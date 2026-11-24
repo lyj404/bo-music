@@ -52,7 +52,7 @@ def aur(args):
     pkgbuild = (ROOT / "installer/aur/PKGBUILD.in").read_text()
     for key, value in substitutions.items():
         pkgbuild = pkgbuild.replace(f"@{key}@", value)
-    destination = args.directory / "aur" / "bo_music-bin"
+    destination = args.directory / "aur" / "bo_music"
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "PKGBUILD").write_text(pkgbuild)
     # Only literal assignments in the template header are used. No shell code is executed.
@@ -61,13 +61,13 @@ def aur(args):
         if line and not line.startswith("#") and "=" in line:
             key, value = line.split("=", 1)
             fields[key] = shlex.split(value.strip("()"))
-    srcinfo = ["pkgbase = bo_music-bin"]
-    for field in ("pkgdesc", "pkgver", "pkgrel", "url", "arch", "license", "depends", "optdepends", "provides", "conflicts", "options", "source_x86_64", "sha256sums_x86_64"):
+    srcinfo = ["pkgbase = bo_music"]
+    for field in ("pkgdesc", "pkgver", "pkgrel", "url", "arch", "license", "depends", "optdepends", "options", "source_x86_64", "sha256sums_x86_64"):
         srcinfo.extend(f"\t{field} = {value}" for value in fields[field])
-    srcinfo.extend(["", "pkgname = bo_music-bin", ""])
+    srcinfo.extend(["", "pkgname = bo_music", ""])
     (destination / ".SRCINFO").write_text("\n".join(srcinfo))
     with tarfile.open(args.directory / f"bo_music_{version}_aur.tar.gz", "w:gz") as target:
-        target.add(destination, arcname="bo_music-bin")
+        target.add(destination, arcname="bo_music")
 
 
 def notes(args):
@@ -87,11 +87,11 @@ def notes(args):
         f"{checksum(args.directory / name)}  {name}\n" for name in assets
     ))
     base = f"https://github.com/{args.repository}/releases/download/v{version}"
-    rows = zip(("Windows x64 压缩包", "Windows x64 简体中文安装包", "Linux x64 压缩包", "Debian / Ubuntu 24.04+ amd64", "AUR 构建文件（bo_music-bin）"), assets)
+    rows = zip(("Windows x64 压缩包", "Windows x64 简体中文安装包", "Linux x64 压缩包", "Debian / Ubuntu 24.04+ amd64", "AUR 构建文件（bo_music）"), assets)
     text = "| 平台 | 下载 |\n| --- | --- |\n"
     text += "".join(f"| {label} | [{name}]({base}/{name}) |\n" for label, name in rows)
     text += "\nLinux 压缩包需要系统提供 libmpv.so.2、字体、图形库和 Secret Service。DEB 会自动安装声明的依赖。\n"
-    text += "\nAUR 文件包含 PKGBUILD 和 .SRCINFO，可解压后运行 `makepkg -si`。首次提交到 AUR 后，可使用 `yay -S bo_music-bin`。\n"
+    text += "\nAUR 文件包含 PKGBUILD 和 .SRCINFO，可解压后运行 `makepkg -si`。首次提交到 AUR 后，可使用 `yay -S bo_music`。\n"
     (args.directory / "release-notes.md").write_text(text)
 
 

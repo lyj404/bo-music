@@ -4,16 +4,13 @@ impl MusicApp {
     pub(super) fn navigate(&mut self, page: Page, cx: &mut Context<Self>) {
         self.appearance_page.open = false;
         self.shortcuts.open = false;
-        self.page = page;
+        self.navigation.enter(page);
         self.row_actions = None;
-        self.browse_description_open = false;
         match page {
             Page::Home => {
-                self.home_playlist_open = false;
                 let _ = self.service.commands.send(Command::LoadHome);
             }
             Page::Library => {
-                self.library_album_open = false;
                 let _ = self.service.commands.send(Command::LoadLibrary);
             }
             Page::Charts => {
@@ -26,18 +23,32 @@ impl MusicApp {
                 let _ = self
                     .service
                     .commands
-                    .send(Command::Collections(self.collection_kind));
+                    .send(Command::Collections(self.navigation.collection_kind));
             }
             Page::Recent => {
                 let _ = self.service.commands.send(Command::ShowHistory);
             }
             Page::PlaylistSquare => {
-                self.browse = None;
                 let _ = self.service.commands.send(Command::PlaylistSquare);
             }
             Page::AccountOverview => self.load_account_overview(cx),
             _ => self.run_search(cx),
         }
+        cx.notify();
+    }
+
+    pub(super) fn can_go_back(&self) -> bool {
+        !self.appearance_page.open && !self.shortcuts.open && self.navigation.can_go_back()
+    }
+
+    pub(super) fn go_back(&mut self, cx: &mut Context<Self>) {
+        if !self.can_go_back() {
+            return;
+        }
+        self.row_actions = None;
+        self.navigation.browse_description_open = false;
+        let _ = self.service.commands.send(Command::BrowseBack);
+        let _ = self.service.commands.send(Command::LoadDetails);
         cx.notify();
     }
 
@@ -88,7 +99,8 @@ impl MusicApp {
             if index == 4 {
                 nav = nav.child(ui::section_label("我的音乐", cx));
             }
-            let active = self.page == page && !self.appearance_page.open && !self.shortcuts.open;
+            let active =
+                self.navigation.page == page && !self.appearance_page.open && !self.shortcuts.open;
             nav = nav.child(
                 div()
                     .id(("navigation", index))

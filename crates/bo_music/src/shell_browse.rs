@@ -8,8 +8,8 @@ impl MusicApp {
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
-        if let Some(view) = self.browse.as_ref().filter(|view| {
-            if self.page == Page::PlaylistSquare {
+        if let Some(view) = self.navigation.browse.as_ref().filter(|view| {
+            if self.navigation.page == Page::PlaylistSquare {
                 !self.auth.busy && view.square.is_some()
             } else {
                 view.square.is_none()
@@ -99,20 +99,10 @@ impl MusicApp {
                         .gap_3()
                         .pb_4()
                         .when(is_detail, |row| {
-                            row.child(ui::icon_button("browse-back", "back", cx).on_click(
-                                cx.listener(|this, _, _, cx| {
-                                    if this.page == Page::Home && this.home_playlist_open {
-                                        this.home_playlist_open = false;
-                                        cx.notify();
-                                    }
-                                    if this.page == Page::Library && this.library_album_open {
-                                        this.library_album_open = false;
-                                        cx.notify();
-                                    }
-                                    let _ = this.service.commands.send(Command::BrowseBack);
-                                    let _ = this.service.commands.send(Command::LoadDetails);
-                                }),
-                            ))
+                            row.child(
+                                ui::icon_button("browse-back", "back", cx)
+                                    .on_click(cx.listener(|this, _, _, cx| this.go_back(cx))),
+                            )
                         })
                         .when(!is_detail, |row| {
                             row.child(ui::heading(view.title.clone(), cx))
@@ -133,7 +123,7 @@ impl MusicApp {
                             view.my_playlists
                                 && self.auth.account.is_some()
                                 && !view.loading
-                                && !self.playlist_busy,
+                                && !self.playlist_editor.busy,
                             |row| {
                                 row.child(
                                     ui::icon_button_labeled(
@@ -144,9 +134,10 @@ impl MusicApp {
                                     )
                                     .on_click(cx.listener(
                                         |this, _, window, cx| {
-                                            this.playlist_name_input
+                                            this.playlist_editor
+                                                .name_input
                                                 .update(cx, |input, cx| input.clear(cx));
-                                            this.playlist_private = false;
+                                            this.playlist_editor.private = false;
                                             this.open_playlist_dialog(
                                                 PlaylistDialog::Create,
                                                 window,
@@ -159,7 +150,7 @@ impl MusicApp {
                             },
                         )
                         .when(
-                            view.editable_playlist.is_some() && !self.playlist_busy,
+                            view.editable_playlist.is_some() && !self.playlist_editor.busy,
                             |row| {
                                 let id = view.editable_playlist.expect("checked playlist");
                                 row.child(
@@ -338,44 +329,50 @@ impl MusicApp {
                                             })),
                                     )
                                 })
-                                .when(count > 0 && !self.playlist_busy && !self.auth.busy, |bar| {
-                                    bar.child(
-                                        div()
-                                            .id("batch-add")
-                                            .cursor_pointer()
-                                            .text_color(rgb(0x415de5))
-                                            .child("批量加入歌单")
-                                            .on_click(cx.listener(move |this, _, _, _| {
-                                                let _ = this.service.commands.send(
-                                                    Command::OpenBatchPicker(
-                                                        BatchSource::Browse(generation),
-                                                        add_selection.clone(),
-                                                    ),
-                                                );
-                                            })),
-                                    )
-                                })
-                                .when(count > 0 && !self.playlist_busy && !self.auth.busy, |bar| {
-                                    bar.child(
-                                        div()
-                                            .id("batch-like")
-                                            .cursor_pointer()
-                                            .text_color(rgb(0x415de5))
-                                            .child("批量喜欢")
-                                            .on_click(cx.listener(move |this, _, _, _| {
-                                                let _ = this.service.commands.send(
-                                                    Command::LikeSelected(
-                                                        BatchSource::Browse(generation),
-                                                        like_selection.clone(),
-                                                    ),
-                                                );
-                                            })),
-                                    )
-                                })
+                                .when(
+                                    count > 0 && !self.playlist_editor.busy && !self.auth.busy,
+                                    |bar| {
+                                        bar.child(
+                                            div()
+                                                .id("batch-add")
+                                                .cursor_pointer()
+                                                .text_color(rgb(0x415de5))
+                                                .child("批量加入歌单")
+                                                .on_click(cx.listener(move |this, _, _, _| {
+                                                    let _ = this.service.commands.send(
+                                                        Command::OpenBatchPicker(
+                                                            BatchSource::Browse(generation),
+                                                            add_selection.clone(),
+                                                        ),
+                                                    );
+                                                })),
+                                        )
+                                    },
+                                )
+                                .when(
+                                    count > 0 && !self.playlist_editor.busy && !self.auth.busy,
+                                    |bar| {
+                                        bar.child(
+                                            div()
+                                                .id("batch-like")
+                                                .cursor_pointer()
+                                                .text_color(rgb(0x415de5))
+                                                .child("批量喜欢")
+                                                .on_click(cx.listener(move |this, _, _, _| {
+                                                    let _ = this.service.commands.send(
+                                                        Command::LikeSelected(
+                                                            BatchSource::Browse(generation),
+                                                            like_selection.clone(),
+                                                        ),
+                                                    );
+                                                })),
+                                        )
+                                    },
+                                )
                                 .when(
                                     count > 0
                                         && editable.is_some()
-                                        && !self.playlist_busy
+                                        && !self.playlist_editor.busy
                                         && !self.auth.busy,
                                     |bar| {
                                         let playlist_id =
@@ -462,19 +459,19 @@ impl MusicApp {
                                     .px_3()
                                     .py_2()
                                     .cursor_pointer()
-                                    .child(if self.browse_description_open {
+                                    .child(if self.navigation.browse_description_open {
                                         "收起介绍 ⌃"
                                     } else {
                                         "展开介绍 ⌄"
                                     })
                                     .on_click(cx.listener(|this, _, _, cx| {
-                                        this.browse_description_open =
-                                            !this.browse_description_open;
+                                        this.navigation.browse_description_open =
+                                            !this.navigation.browse_description_open;
                                         cx.notify();
                                     })),
                             )
                             .when(
-                                self.browse_description_open,
+                                self.navigation.browse_description_open,
                                 |body| {
                                     body.child(
                                         div()
@@ -528,26 +525,26 @@ impl MusicApp {
                         )
                         .when(view.has_more || view.loading, |body| {
                             body.child(
-                                div()
-                                    .id("browse-more")
-                                    .p_3()
-                                    .text_center()
-                                    .text_color(rgb(0x415de5))
-                                    .child(if view.loading {
+                                ui::icon_button_labeled(
+                                    "browse-more",
+                                    "refresh",
+                                    if view.loading {
                                         "正在加载…"
                                     } else if retry {
-                                        "重试"
+                                        "重试加载"
                                     } else {
                                         "加载更多"
-                                    })
-                                    .when(!view.loading, |button| {
-                                        button.cursor_pointer().on_click(cx.listener(
-                                            |this, _, _, _| {
-                                                let _ =
-                                                    this.service.commands.send(Command::BrowseNext);
-                                            },
-                                        ))
-                                    }),
+                                    },
+                                    cx,
+                                )
+                                .when(view.loading, |button| button.opacity(0.45).cursor_default())
+                                .when(!view.loading, |button| {
+                                    button.cursor_pointer().on_click(cx.listener(
+                                        |this, _, _, _| {
+                                            let _ = this.service.commands.send(Command::BrowseNext);
+                                        },
+                                    ))
+                                }),
                             )
                         }),
                 )
@@ -557,7 +554,7 @@ impl MusicApp {
                 .flex_1()
                 .p_4()
                 .text_color(rgb(0x8a91a2))
-                .child(if self.page == Page::PlaylistSquare {
+                .child(if self.navigation.page == Page::PlaylistSquare {
                     "正在加载歌单分类…"
                 } else {
                     "输入关键词开始搜索"

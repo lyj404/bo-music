@@ -3,7 +3,7 @@ use super::*;
 impl MusicApp {
     pub(super) fn render_comments_panel(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
-        if let Some(view) = &self.comments {
+        if let Some(view) = &self.comment_panel.view {
             let generation = view.generation;
             let same_track = view.track_id.is_some()
                 && view.track_id == self.player.as_ref().and_then(|player| player.track_id);
@@ -75,7 +75,7 @@ impl MusicApp {
                                     .cursor_pointer()
                                     .child(self.cover(Some(url), 96.0, cx))
                                     .on_click(cx.listener(move |this, _, _, cx| {
-                                        if same_track && this.show_comments {
+                                        if same_track && this.panels.show_comments {
                                             this.open_comment_image(generation, id, false, cx);
                                         }
                                     })),
@@ -135,7 +135,7 @@ impl MusicApp {
                                         )
                                         .on_click(
                                             cx.listener(move |this, _, _, cx| {
-                                                if this.show_comments {
+                                                if this.panels.show_comments {
                                                     this.open_comment_image(
                                                         generation, id, true, cx,
                                                     );
@@ -152,7 +152,7 @@ impl MusicApp {
                 && view.track_id.is_some_and(|id| id <= i64::from(i32::MAX))
                 && key.is_some()
                 && !view.posting
-                && self.submitted_comment.is_none();
+                && self.comment_panel.submitted.is_none();
             let message = if !same_track {
                 "选择一首歌曲后查看评论".to_owned()
             } else if view.loading && view.rows.is_empty() {
@@ -234,11 +234,7 @@ impl MusicApp {
                             )))
                         })
                         .child(
-                            div()
-                                .id("comments-refresh")
-                                .cursor_pointer()
-                                .text_color(rgb(0x415de5))
-                                .child("刷新")
+                            ui::icon_button_labeled("comments-refresh", "refresh", "刷新评论", cx)
                                 .on_click(cx.listener(move |this, _, _, _| {
                                     let _ = this
                                         .service
@@ -265,28 +261,29 @@ impl MusicApp {
                         .children(comment_rows)
                         .when(same_track && (view.has_more || view.loading), |body| {
                             body.child(
-                                div()
-                                    .id("comments-more")
-                                    .p_2()
-                                    .text_sm()
-                                    .text_color(rgb(0x415de5))
-                                    .child(if view.loading {
+                                ui::icon_button_labeled(
+                                    "comments-more",
+                                    "refresh",
+                                    if view.loading {
                                         "正在加载…"
                                     } else if view.error.is_some() {
-                                        "重试"
+                                        "重试加载"
                                     } else {
                                         "加载更多"
-                                    })
-                                    .when(!view.loading, |button| {
-                                        button.cursor_pointer().on_click(cx.listener(
-                                            move |this, _, _, _| {
-                                                let _ = this
-                                                    .service
-                                                    .commands
-                                                    .send(Command::CommentsNext(generation));
-                                            },
-                                        ))
-                                    }),
+                                    },
+                                    cx,
+                                )
+                                .when(view.loading, |button| button.opacity(0.45).cursor_default())
+                                .when(!view.loading, |button| {
+                                    button.cursor_pointer().on_click(cx.listener(
+                                        move |this, _, _, _| {
+                                            let _ = this
+                                                .service
+                                                .commands
+                                                .send(Command::CommentsNext(generation));
+                                        },
+                                    ))
+                                }),
                             )
                         }),
                 )
@@ -318,7 +315,7 @@ impl MusicApp {
                                         })),
                                 )
                             })
-                            .child(self.comment_input.clone())
+                            .child(self.comment_panel.input.clone())
                             .child(
                                 div()
                                     .flex()
@@ -329,15 +326,15 @@ impl MusicApp {
                                             .id("comment-anonymous")
                                             .cursor_pointer()
                                             .text_color(rgb(0x687083))
-                                            .child(if self.comment_anonymous {
+                                            .child(if self.comment_panel.anonymous {
                                                 "☑ 匿名"
                                             } else {
                                                 "☐ 匿名"
                                             })
                                             .on_click(cx.listener(|this, _, _, cx| {
-                                                if this.submitted_comment.is_none() {
-                                                    this.comment_anonymous =
-                                                        !this.comment_anonymous;
+                                                if this.comment_panel.submitted.is_none() {
+                                                    this.comment_panel.anonymous =
+                                                        !this.comment_panel.anonymous;
                                                     cx.notify();
                                                 }
                                             })),
@@ -355,7 +352,8 @@ impl MusicApp {
                                                 button.cursor_pointer().on_click(cx.listener(
                                                     move |this, _, _, cx| {
                                                         let text = this
-                                                            .comment_input
+                                                            .comment_panel
+                                                            .input
                                                             .read(cx)
                                                             .text()
                                                             .to_owned();
@@ -373,7 +371,7 @@ impl MusicApp {
                                                         let Some(key) = key else {
                                                             return;
                                                         };
-                                                        this.submitted_comment =
+                                                        this.comment_panel.submitted =
                                                             Some((generation, key, text.clone()));
                                                         if this
                                                             .service
@@ -381,11 +379,11 @@ impl MusicApp {
                                                             .send(Command::PublishComment(
                                                                 generation,
                                                                 text,
-                                                                this.comment_anonymous,
+                                                                this.comment_panel.anonymous,
                                                             ))
                                                             .is_err()
                                                         {
-                                                            this.submitted_comment = None;
+                                                            this.comment_panel.submitted = None;
                                                             this.status =
                                                                 "评论服务不可用，草稿已保留".into();
                                                         }

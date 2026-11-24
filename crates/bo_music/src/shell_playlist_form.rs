@@ -8,15 +8,15 @@ impl MusicApp {
         cx: &mut Context<Self>,
     ) {
         self.status.clear();
-        self.playlist_dialog = mode;
+        self.playlist_editor.dialog = mode;
         self.show_account = false;
-        self.player_tools_open = false;
-        window.focus(&self.playlist_modal_focus);
+        self.panels.player_tools_open = false;
+        window.focus(&self.playlist_editor.modal_focus);
         cx.notify();
     }
     pub(super) fn close_playlist_dialog(&mut self, cx: &mut Context<Self>) {
-        if !self.playlist_busy {
-            self.playlist_dialog = PlaylistDialog::Closed;
+        if !self.playlist_editor.busy {
+            self.playlist_editor.dialog = PlaylistDialog::Closed;
             self.clear_playlist_cover(cx);
             self.restore_playlist_focus(cx);
             cx.notify();
@@ -36,14 +36,15 @@ impl MusicApp {
     }
     pub(super) fn render_playlist_modal(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let Some(view) = self
+            .navigation
             .browse
             .as_ref()
-            .filter(|_| self.playlist_dialog != PlaylistDialog::Closed)
+            .filter(|_| self.playlist_editor.dialog != PlaylistDialog::Closed)
         else {
             return div().into_any_element();
         };
         let rgb = appearance::paint(cx);
-        let title = match self.playlist_dialog {
+        let title = match self.playlist_editor.dialog {
             PlaylistDialog::Create => "新建歌单",
             PlaylistDialog::Delete(_) => "删除歌单",
             _ => "编辑歌单",
@@ -59,10 +60,10 @@ impl MusicApp {
             .justify_center()
             .p_6()
             .bg(gpui::rgba(0x00000055))
-            .track_focus(&self.playlist_modal_focus)
+            .track_focus(&self.playlist_editor.modal_focus)
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 if event.keystroke.key == "escape" {
-                    if !this.playlist_busy {
+                    if !this.playlist_editor.busy {
                         this.close_playlist_dialog(cx);
                         window.focus(&this.playback_focus);
                     }
@@ -99,9 +100,9 @@ impl MusicApp {
                             )
                             .child(
                                 ui::icon_button("playlist-modal-close", "close", cx)
-                                    .when(self.playlist_busy, |button| button.opacity(0.4))
+                                    .when(self.playlist_editor.busy, |button| button.opacity(0.4))
                                     .on_click(cx.listener(|this, _, window, cx| {
-                                        if !this.playlist_busy {
+                                        if !this.playlist_editor.busy {
                                             this.close_playlist_dialog(cx);
                                             window.focus(&this.playback_focus);
                                         }
@@ -119,9 +120,9 @@ impl MusicApp {
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
-        let mode = self.playlist_dialog;
-        let busy = self.playlist_busy;
-        let tag_groups = self.playlist_category_groups.as_ref().map(|groups| {
+        let mode = self.playlist_editor.dialog;
+        let busy = self.playlist_editor.busy;
+        let tag_groups = self.playlist_editor.category_groups.as_ref().map(|groups| {
             groups
                 .iter()
                 .enumerate()
@@ -132,7 +133,7 @@ impl MusicApp {
                         .enumerate()
                         .filter_map(|(index, category)| {
                             let id = i32::try_from(category.id).ok().filter(|id| *id > 0)?;
-                            let checked = self.playlist_selected_categories.contains(&id);
+                            let checked = self.playlist_editor.selected_categories.contains(&id);
                             Some(
                                 div()
                                     .id(("playlist-tag", group_index * 10000 + index))
@@ -149,17 +150,21 @@ impl MusicApp {
                                         category.name
                                     ))
                                     .on_click(cx.listener(move |this, _, _, cx| {
-                                        if this.playlist_busy {
+                                        if this.playlist_editor.busy {
                                             return;
                                         }
                                         if let Some(position) = this
-                                            .playlist_selected_categories
+                                            .playlist_editor
+                                            .selected_categories
                                             .iter()
                                             .position(|value| *value == id)
                                         {
-                                            this.playlist_selected_categories.remove(position);
-                                        } else if this.playlist_selected_categories.len() < 3 {
-                                            this.playlist_selected_categories.push(id);
+                                            this.playlist_editor
+                                                .selected_categories
+                                                .remove(position);
+                                        } else if this.playlist_editor.selected_categories.len() < 3
+                                        {
+                                            this.playlist_editor.selected_categories.push(id);
                                         } else {
                                             this.status = "最多选择三个标签".into();
                                         }
@@ -179,10 +184,12 @@ impl MusicApp {
                 .collect::<Vec<_>>()
         });
         let selected_labels = self
-            .playlist_selected_categories
+            .playlist_editor
+            .selected_categories
             .iter()
             .map(|id| {
-                self.playlist_category_groups
+                self.playlist_editor
+                    .category_groups
                     .as_ref()
                     .and_then(|groups| {
                         groups
@@ -191,7 +198,8 @@ impl MusicApp {
                             .find(|category| category.id == i64::from(*id))
                     })
                     .or_else(|| {
-                        self.playlist_original_categories
+                        self.playlist_editor
+                            .original_categories
                             .iter()
                             .find(|category| category.id == i64::from(*id))
                     })
@@ -220,21 +228,21 @@ impl MusicApp {
                         .flex_col()
                         .gap_2()
                         .child(div().text_sm().child("歌单名称"))
-                        .child(self.playlist_name_input.clone()),
+                        .child(self.playlist_editor.name_input.clone()),
                 )
                 .child(
                     div()
                         .id("playlist-private")
                         .cursor_pointer()
                         .text_color(rgb(0x415de5))
-                        .child(if self.playlist_private {
+                        .child(if self.playlist_editor.private {
                             "☑ 设为私密歌单"
                         } else {
                             "☐ 设为私密歌单"
                         })
                         .on_click(cx.listener(|this, _, _, cx| {
-                            if !this.playlist_busy {
-                                this.playlist_private = !this.playlist_private;
+                            if !this.playlist_editor.busy {
+                                this.playlist_editor.private = !this.playlist_editor.private;
                                 cx.notify();
                             }
                         })),
@@ -248,7 +256,7 @@ impl MusicApp {
                         .flex_col()
                         .gap_2()
                         .child(div().text_sm().child("歌单名称"))
-                        .child(self.playlist_name_input.clone()),
+                        .child(self.playlist_editor.name_input.clone()),
                 )
                 .child(
                     div()
@@ -257,7 +265,7 @@ impl MusicApp {
                         .flex_col()
                         .gap_2()
                         .child(div().text_sm().child("歌单简介"))
-                        .child(self.playlist_description_input.clone()),
+                        .child(self.playlist_editor.description_input.clone()),
                 )
                 .child(
                     div()
@@ -271,13 +279,14 @@ impl MusicApp {
                                 .text_color(rgb(0x415de5))
                                 .child("选择封面")
                                 .on_click(cx.listener(|this, _, _, cx| {
-                                    let PlaylistDialog::Edit(id) = this.playlist_dialog else {
+                                    let PlaylistDialog::Edit(id) = this.playlist_editor.dialog
+                                    else {
                                         return;
                                     };
-                                    if this.playlist_busy {
+                                    if this.playlist_editor.busy {
                                         return;
                                     }
-                                    let generation = this.playlist_editor_generation;
+                                    let generation = this.playlist_editor.generation;
                                     let result = cx.prompt_for_paths(PathPromptOptions {
                                         files: true,
                                         directories: false,
@@ -287,9 +296,10 @@ impl MusicApp {
                                     cx.spawn(async move |entity, cx| {
                                         let result = result.await;
                                         let _ = entity.update(cx, |this, cx| {
-                                            if this.playlist_dialog != PlaylistDialog::Edit(id)
-                                                || this.playlist_editor_generation != generation
-                                                || this.playlist_busy
+                                            if this.playlist_editor.dialog
+                                                != PlaylistDialog::Edit(id)
+                                                || this.playlist_editor.generation != generation
+                                                || this.playlist_editor.busy
                                             {
                                                 return;
                                             }
@@ -297,20 +307,21 @@ impl MusicApp {
                                                 Ok(Ok(Some(paths))) => {
                                                     if let Some(path) = paths.into_iter().next() {
                                                         this.clear_playlist_cover(cx);
-                                                        this.playlist_cover_path =
+                                                        this.playlist_editor.cover_path =
                                                             Some(path.clone());
-                                                        this.playlist_cover_loading = true;
+                                                        this.playlist_editor.cover_loading = true;
                                                         if this
                                                             .service
                                                             .commands
                                                             .send(Command::LoadPlaylistCover(
-                                                                this.playlist_cover_request,
+                                                                this.playlist_editor.cover_request,
                                                                 path,
                                                             ))
                                                             .is_err()
                                                         {
-                                                            this.playlist_cover_loading = false;
-                                                            this.playlist_cover_path = None;
+                                                            this.playlist_editor.cover_loading =
+                                                                false;
+                                                            this.playlist_editor.cover_path = None;
                                                             this.status =
                                                                 "无法加载封面，请重试".into();
                                                         }
@@ -329,13 +340,14 @@ impl MusicApp {
                                 })),
                         )
                         .child(
-                            self.playlist_cover_path
+                            self.playlist_editor
+                                .cover_path
                                 .as_ref()
                                 .and_then(|path| path.file_name())
                                 .map(|name| name.to_string_lossy().into_owned())
                                 .unwrap_or_else(|| "沿用原封面".into()),
                         )
-                        .when(self.playlist_cover_path.is_some(), |row| {
+                        .when(self.playlist_editor.cover_path.is_some(), |row| {
                             row.child(
                                 div()
                                     .id("playlist-clear-cover")
@@ -343,7 +355,7 @@ impl MusicApp {
                                     .text_color(rgb(0x415de5))
                                     .child("沿用原封面")
                                     .on_click(cx.listener(|this, _, _, cx| {
-                                        if !this.playlist_busy {
+                                        if !this.playlist_editor.busy {
                                             this.clear_playlist_cover(cx);
                                             cx.notify();
                                         }
@@ -351,10 +363,10 @@ impl MusicApp {
                             )
                         }),
                 )
-                .when(self.playlist_cover_loading, |form| {
+                .when(self.playlist_editor.cover_loading, |form| {
                     form.child("正在加载封面…")
                 })
-                .when(self.playlist_cover_image.is_some(), |form| {
+                .when(self.playlist_editor.cover_image.is_some(), |form| {
                     form.child(self.playlist_cover_cropper(cx))
                 })
                 .child(div().text_sm().child(format!(
@@ -366,7 +378,7 @@ impl MusicApp {
                     }
                 )))
                 .when(
-                    tag_groups.is_some() && !self.playlist_selected_categories.is_empty(),
+                    tag_groups.is_some() && !self.playlist_editor.selected_categories.is_empty(),
                     |form| {
                         form.child(
                             div()
@@ -376,8 +388,8 @@ impl MusicApp {
                                 .text_sm()
                                 .child("清空标签")
                                 .on_click(cx.listener(|this, _, _, cx| {
-                                    if !this.playlist_busy {
-                                        this.playlist_selected_categories.clear();
+                                    if !this.playlist_editor.busy {
+                                        this.playlist_editor.selected_categories.clear();
                                         cx.notify();
                                     }
                                 })),
@@ -439,7 +451,7 @@ impl MusicApp {
                     .text_color(rgb(0x687083))
                     .child("取消")
                     .on_click(cx.listener(|this, _, window, cx| {
-                        if !this.playlist_busy {
+                        if !this.playlist_editor.busy {
                             this.close_playlist_dialog(cx);
                             window.focus(&this.playback_focus);
                         }
@@ -456,7 +468,7 @@ impl MusicApp {
                         .text_color(gpui::rgb(0xffffff))
                         .child(if busy {
                             "正在保存…"
-                        } else if self.playlist_cover_loading
+                        } else if self.playlist_editor.cover_loading
                             && matches!(mode, PlaylistDialog::Edit(_))
                         {
                             "正在加载封面…"
@@ -465,15 +477,20 @@ impl MusicApp {
                         })
                         .when(
                             !(busy
-                                || self.playlist_cover_loading
+                                || self.playlist_editor.cover_loading
                                     && matches!(mode, PlaylistDialog::Edit(_))),
                             |button| {
                                 button.cursor_pointer().on_click(cx.listener(
                                     move |this, _, _, cx| {
-                                        let name =
-                                            this.playlist_name_input.read(cx).text().to_owned();
+                                        let name = this
+                                            .playlist_editor
+                                            .name_input
+                                            .read(cx)
+                                            .text()
+                                            .to_owned();
                                         let description = this
-                                            .playlist_description_input
+                                            .playlist_editor
+                                            .description_input
                                             .read(cx)
                                             .text()
                                             .to_owned();
@@ -481,7 +498,7 @@ impl MusicApp {
                                             PlaylistDialog::Create => {
                                                 Some(Command::CreatePlaylist(
                                                     name,
-                                                    this.playlist_private,
+                                                    this.playlist_editor.private,
                                                 ))
                                             }
                                             PlaylistDialog::Edit(id) => {
@@ -489,11 +506,13 @@ impl MusicApp {
                                                     id,
                                                     name,
                                                     description,
-                                                    this.playlist_selected_categories.clone(),
-                                                    this.playlist_cover_image.as_ref().map(
+                                                    this.playlist_editor
+                                                        .selected_categories
+                                                        .clone(),
+                                                    this.playlist_editor.cover_image.as_ref().map(
                                                         |image| CoverEdit {
                                                             image: Arc::clone(image),
-                                                            crop: this.playlist_cover_crop,
+                                                            crop: this.playlist_editor.cover_crop,
                                                         },
                                                     ),
                                                 ))

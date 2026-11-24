@@ -495,7 +495,7 @@ impl MusicApp {
                             row.cursor_pointer()
                                 .hover(|row| row.bg(rgb(0xe9edf5)))
                                 .on_click(cx.listener(move |this, _, _, _| {
-                                    if this.page == Page::AccountOverview
+                                    if this.navigation.page == Page::AccountOverview
                                         && this.account_overview_generation == generation
                                     {
                                         let _ = this

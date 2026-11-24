@@ -9,36 +9,33 @@ impl MusicApp {
 
     pub(super) fn run_search(&mut self, cx: &mut Context<Self>) {
         if self.auth.busy
-            || self.playlist_dialog != PlaylistDialog::Closed
-            || self.input.read(cx).is_composing()
+            || self.playlist_editor.dialog != PlaylistDialog::Closed
+            || self.search.input.read(cx).is_composing()
         {
             return;
         }
         self.appearance_page.open = false;
         self.shortcuts.open = false;
-        let query = self.input.read(cx).text().trim().to_owned();
-        self.search_assist_dismissed = true;
-        self.show_hot_words = false;
-        self.show_search_history = false;
-        self.confirm_clear_search_history = false;
-        self.suggestion_generation = self.suggestion_generation.wrapping_add(1);
-        self.search_suggestions.clear();
+        self.navigation.browse = None;
+        self.navigation.overview_detail_open = false;
+        let query = self.search.input.read(cx).text().trim().to_owned();
+        self.search.dismiss_assist();
+        self.search.invalidate_suggestions();
         let _ = self.service.commands.send(Command::SearchSuggestions(
-            self.suggestion_generation,
+            self.search.suggestion_generation,
             String::new(),
         ));
-        let command = match self.page {
+        let command = match self.navigation.page {
             Page::Tracks => Command::Search(query),
             Page::AlbumSearch => Command::SearchAlbums(query),
             Page::ArtistSearch => Command::SearchArtists(query),
             Page::PlaylistSearch => Command::SearchPlaylists(query),
             _ => {
-                self.page = Page::Overview;
-                self.overview_generation = self.overview_generation.wrapping_add(1);
-                self.overview_query.clone_from(&query);
-                self.overview_result = None;
-                self.overview_detail_open = false;
-                Command::SearchOverview(self.overview_generation, query)
+                self.navigation.page = Page::Overview;
+                self.search.overview_generation = self.search.overview_generation.wrapping_add(1);
+                self.search.overview_query.clone_from(&query);
+                self.search.overview_result = None;
+                Command::SearchOverview(self.search.overview_generation, query)
             }
         };
         let _ = self.service.commands.send(command);
@@ -46,28 +43,21 @@ impl MusicApp {
     }
 
     pub(super) fn search_input_changed(&mut self, cx: &mut Context<Self>) {
-        let input = self.input.read(cx);
+        let input = self.search.input.read(cx);
         let query = (!input.is_composing()).then(|| input.text().trim().to_owned());
-        if self.suggestion_query == query {
+        if !self.search.update_suggestion_query(query.clone()) {
             return;
         }
-        self.search_assist_dismissed = false;
-        self.suggestion_query = query.clone();
-        self.suggestion_generation = self.suggestion_generation.wrapping_add(1);
-        self.search_suggestions.clear();
-        self.show_hot_words = false;
-        self.show_search_history = false;
-        self.confirm_clear_search_history = false;
         let _ = self.service.commands.send(Command::SearchSuggestions(
-            self.suggestion_generation,
+            self.search.suggestion_generation,
             query.unwrap_or_default(),
         ));
         cx.notify();
     }
 
     pub(super) fn load_hot_words(&mut self, cx: &mut Context<Self>) {
-        if !self.hot_words_loading {
-            self.hot_words_loading = self
+        if !self.search.hot_words_loading {
+            self.search.hot_words_loading = self
                 .service
                 .commands
                 .send(Command::LoadSearchHotWords)
@@ -77,45 +67,47 @@ impl MusicApp {
     }
 
     pub(super) fn dismiss_search_assist(&mut self, cx: &mut Context<Self>) {
-        self.search_assist_dismissed = true;
-        self.show_hot_words = false;
-        self.show_search_history = false;
-        self.confirm_clear_search_history = false;
+        self.search.dismiss_assist();
         cx.notify();
     }
 
     pub(super) fn render_search_assist(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
-        let history = self.show_search_history;
+        let history = self.search.show_history;
         let words = if history {
-            self.search_history
+            self.search
+                .history
                 .as_ref()
                 .and_then(|result| result.as_ref().ok())
                 .map(Vec::as_slice)
                 .unwrap_or_default()
-        } else if self.show_hot_words {
-            self.hot_words.as_deref().unwrap_or_default()
+        } else if self.search.show_hot_words {
+            self.search.hot_words.as_deref().unwrap_or_default()
         } else {
-            &self.search_suggestions
+            &self.search.suggestions
         };
         let heading = if history {
             "搜索历史"
-        } else if self.show_hot_words {
+        } else if self.search.show_hot_words {
             "热门搜索"
         } else {
             "搜索建议"
         };
         let loading = if history {
-            self.search_history.is_none()
+            self.search.history.is_none()
         } else {
-            self.show_hot_words && self.hot_words_loading
+            self.search.show_hot_words && self.search.hot_words_loading
         };
         let error = if history {
-            self.search_history
+            self.search
+                .history
                 .as_ref()
                 .and_then(|result| result.as_ref().err())
                 .cloned()
-        } else if self.show_hot_words && !self.hot_words_loading && self.hot_words.is_none() {
+        } else if self.search.show_hot_words
+            && !self.search.hot_words_loading
+            && self.search.hot_words.is_none()
+        {
             Some("热门搜索加载失败".into())
         } else {
             None
@@ -154,28 +146,28 @@ impl MusicApp {
                             ui::icon_button_labeled(
                                 "search-history-clear",
                                 "delete",
-                                if self.confirm_clear_search_history {
+                                if self.search.confirm_clear_history {
                                     "确认清空搜索记录"
                                 } else {
                                     "清空搜索记录"
                                 },
                                 cx,
                             )
-                            .when(self.confirm_clear_search_history, |button| {
+                            .when(self.search.confirm_clear_history, |button| {
                                 button.bg(rgb(0xe9edff))
                             })
                             .on_click(cx.listener(|this, _, _, cx| {
-                                if this.confirm_clear_search_history {
+                                if this.search.confirm_clear_history {
                                     this.request_search_history(Command::ClearSearchHistory, cx);
                                 } else {
-                                    this.confirm_clear_search_history = true;
+                                    this.search.confirm_clear_history = true;
                                     cx.notify();
                                 }
                             })),
                         )
                     }),
             )
-            .when(self.confirm_clear_search_history && history, |panel| {
+            .when(self.search.confirm_clear_history && history, |panel| {
                 panel.child(
                     div()
                         .px_3()
@@ -213,14 +205,19 @@ impl MusicApp {
                                 .child(message),
                         )
                         .child(
-                            ui::icon_button_labeled("search-assist-retry", "clock", "重新加载", cx)
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    if this.show_search_history {
-                                        this.request_search_history(Command::LoadSearchHistory, cx);
-                                    } else {
-                                        this.load_hot_words(cx);
-                                    }
-                                })),
+                            ui::icon_button_labeled(
+                                "search-assist-retry",
+                                "refresh",
+                                "重新加载",
+                                cx,
+                            )
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                if this.search.show_history {
+                                    this.request_search_history(Command::LoadSearchHistory, cx);
+                                } else {
+                                    this.load_hot_words(cx);
+                                }
+                            })),
                         ),
                 )
             })
@@ -228,9 +225,9 @@ impl MusicApp {
                 !loading
                     && words.is_empty()
                     && (if history {
-                        self.search_history.as_ref().is_some_and(Result::is_ok)
+                        self.search.history.as_ref().is_some_and(Result::is_ok)
                     } else {
-                        !self.show_hot_words || self.hot_words.is_some()
+                        !self.search.show_hot_words || self.search.hot_words.is_some()
                     }),
                 |panel| {
                     panel.child(
@@ -276,8 +273,9 @@ impl MusicApp {
                                     .child(word.clone()),
                             )
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                this.suggestion_query = Some(word.trim().to_owned());
-                                this.input
+                                this.search.suggestion_query = Some(word.trim().to_owned());
+                                this.search
+                                    .input
                                     .update(cx, |input, cx| input.set_text(word.clone(), cx));
                                 this.run_search(cx);
                             }))
@@ -287,10 +285,10 @@ impl MusicApp {
     }
 
     pub(super) fn request_search_history(&mut self, command: Command, cx: &mut Context<Self>) {
-        self.confirm_clear_search_history = false;
-        self.search_history = None;
+        self.search.confirm_clear_history = false;
+        self.search.history = None;
         if self.service.commands.send(command).is_err() {
-            self.search_history = Some(Err("搜索历史服务不可用".into()));
+            self.search.history = Some(Err("搜索历史服务不可用".into()));
         }
         cx.notify();
     }
@@ -298,11 +296,11 @@ impl MusicApp {
     pub(super) fn render_search_overview(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
         let body = div()
-            .id(("search-overview-results", self.overview_generation))
+            .id(("search-overview-results", self.search.overview_generation))
             .flex_1()
             .min_h_0()
             .overflow_y_scroll();
-        let sections = match &self.overview_result {
+        let sections = match &self.search.overview_result {
             Some(Ok(sections)) if !sections.is_empty() => sections,
             result => {
                 if matches!(result, Some(Err(()))) {
@@ -323,7 +321,7 @@ impl MusicApp {
                 }
                 let message = match result {
                     Some(Ok(_)) => "暂无搜索结果",
-                    _ if self.overview_query.is_empty() => "输入关键词开始搜索",
+                    _ if self.search.overview_query.is_empty() => "输入关键词开始搜索",
                     _ => "正在搜索…",
                 };
                 return body
@@ -331,7 +329,7 @@ impl MusicApp {
                     .into_any_element();
             }
         };
-        let generation = self.overview_generation;
+        let generation = self.search.overview_generation;
         body.children(
             sections
                 .iter()
@@ -451,9 +449,9 @@ impl MusicApp {
                                             },
                                         ))
                                         .on_click(cx.listener(move |this, _, _, _| {
-                                            if this.page == Page::Overview
-                                                && !this.overview_detail_open
-                                                && this.overview_generation == generation
+                                            if this.navigation.page == Page::Overview
+                                                && !this.navigation.overview_detail_open
+                                                && this.search.overview_generation == generation
                                             {
                                                 let _ = this.service.commands.send(
                                                     Command::SelectSearchOverview(
@@ -474,10 +472,12 @@ impl MusicApp {
     }
 
     pub(super) fn search_overview_category(&mut self, page: Page, cx: &mut Context<Self>) {
-        let query = self.overview_query.clone();
-        self.suggestion_query = Some(query.clone());
-        self.input.update(cx, |input, cx| input.set_text(query, cx));
-        self.page = page;
+        let query = self.search.overview_query.clone();
+        self.search.suggestion_query = Some(query.clone());
+        self.search
+            .input
+            .update(cx, |input, cx| input.set_text(query, cx));
+        self.navigation.page = page;
         self.run_search(cx);
     }
 }

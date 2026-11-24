@@ -45,8 +45,10 @@ impl MusicApp {
             let track_id = picker.track_id;
             let picker_generation = picker.generation;
             let track_count = picker.track_count;
-            let can_select =
-                !picker.busy && !picker.loading && !self.playlist_busy && picker.error.is_none();
+            let can_select = !picker.busy
+                && !picker.loading
+                && !self.playlist_editor.busy
+                && picker.error.is_none();
             let entries = picker
                 .playlists
                 .iter()
@@ -78,7 +80,7 @@ impl MusicApp {
                 error.clone()
             } else if picker.playlists.is_empty() {
                 "暂无自建歌单".to_owned()
-            } else if picker.busy || self.playlist_busy {
+            } else if picker.busy || self.playlist_editor.busy {
                 "正在保存…".to_owned()
             } else {
                 String::new()

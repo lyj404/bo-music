@@ -8,7 +8,7 @@ impl MusicApp {
     ) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
         let player = self.player.as_ref();
-        let menu_open = self.player_tools_open;
+        let menu_open = self.panels.player_tools_open;
         let playing = player.is_some_and(|p| p.state == PlaybackState::Playing);
         let position = player.map_or(0, |p| p.position_ms);
         let duration = player.map_or(0, |p| p.duration_ms);
@@ -151,7 +151,7 @@ impl MusicApp {
                     .child(ui::icon_button("player-more", "more", cx).on_mouse_down(
                         gpui::MouseButton::Left,
                         cx.listener(move |this, _, _, cx| {
-                            this.player_tools_open = !menu_open;
+                            this.panels.player_tools_open = !menu_open;
                             cx.notify();
                         }),
                     )),
@@ -236,16 +236,18 @@ impl MusicApp {
             )
             .child(
                 ui::icon_button("toggle-queue-panel", "list", cx)
-                    .when(self.side_panel_open, |button| button.bg(rgb(0xe9edff)))
+                    .when(self.panels.side_panel_open, |button| {
+                        button.bg(rgb(0xe9edff))
+                    })
                     .on_click(cx.listener(|this, _, window, cx| {
                         if this.lyric_page.open {
                             this.close_immersive_lyrics(window, cx);
                         }
                         this.close_comments(cx);
-                        this.side_panel_open = !this.side_panel_open;
-                        this.show_lyrics = false;
-                        this.show_effects = false;
-                        this.show_quality = false;
+                        this.panels.side_panel_open = !this.panels.side_panel_open;
+                        this.panels.show_lyrics = false;
+                        this.panels.show_effects = false;
+                        this.panels.show_quality = false;
                         cx.notify();
                     })),
             );
@@ -265,7 +267,7 @@ impl MusicApp {
             .child(left)
             .child(transport)
             .child(tools)
-            .when(self.player_tools_open, |root| {
+            .when(self.panels.player_tools_open, |root| {
                 root.child(self.render_player_menu(cx))
             })
             .into_any_element()
@@ -294,7 +296,7 @@ impl MusicApp {
             .border_color(rgb(0xd8dce6))
             .shadow_lg()
             .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                this.player_tools_open = false;
+                this.panels.player_tools_open = false;
                 cx.notify();
             }))
             .flex()
@@ -344,12 +346,12 @@ impl MusicApp {
                                     this.close_immersive_lyrics(window, cx);
                                 }
                                 this.close_comments(cx);
-                                this.side_panel_open = true;
-                                this.show_lyrics = false;
-                                this.show_effects = index == 0;
-                                this.show_quality = index == 1;
-                                this.show_comments = index == 2;
-                                this.player_tools_open = false;
+                                this.panels.side_panel_open = true;
+                                this.panels.show_lyrics = false;
+                                this.panels.show_effects = index == 0;
+                                this.panels.show_quality = index == 1;
+                                this.panels.show_comments = index == 2;
+                                this.panels.player_tools_open = false;
                                 if index == 2 {
                                     let _ = this.service.commands.send(Command::OpenComments);
                                 }
@@ -369,7 +371,7 @@ impl MusicApp {
                             if let Some((account, _)) = stamp {
                                 let _ = this.service.commands.send(Command::OpenMv(account, id));
                             }
-                            this.player_tools_open = false;
+                            this.panels.player_tools_open = false;
                             cx.notify();
                         })),
                 )
@@ -382,7 +384,7 @@ impl MusicApp {
                                     .commands
                                     .send(Command::ShareCurrent(account, revision, id));
                             }
-                            this.player_tools_open = false;
+                            this.panels.player_tools_open = false;
                             cx.notify();
                         })),
                 )
@@ -395,7 +397,7 @@ impl MusicApp {
                     .cursor_pointer()
                     .child("迷你播放器")
                     .on_click(cx.listener(|this, _, window, cx| {
-                        this.player_tools_open = false;
+                        this.panels.player_tools_open = false;
                         this.open_mini_player(window, cx);
                     })),
             )

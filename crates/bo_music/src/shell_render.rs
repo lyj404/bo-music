@@ -11,14 +11,19 @@ impl Render for MusicApp {
         if self.lyric_page.open {
             return self.render_immersive_lyrics(window, cx);
         }
-        let show_search_assist = !self.search_assist_dismissed
-            && self.playlist_dialog == PlaylistDialog::Closed
+        let show_search_assist = !self.search.assist_dismissed
+            && self.playlist_editor.dialog == PlaylistDialog::Closed
             && !self.auth.busy
             && !self.show_account
-            && (self.show_hot_words
-                || self.show_search_history
-                || (!self.search_suggestions.is_empty()
-                    && self.input.read(cx).focus_handle(cx).is_focused(window)));
+            && (self.search.show_hot_words
+                || self.search.show_history
+                || (!self.search.suggestions.is_empty()
+                    && self
+                        .search
+                        .input
+                        .read(cx)
+                        .focus_handle(cx)
+                        .is_focused(window)));
         let body = if self.shortcuts.open {
             self.render_shortcuts(cx)
         } else if self.appearance_page.open {
@@ -56,8 +61,8 @@ impl Render for MusicApp {
             .track_focus(&self.playback_focus)
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 if event.keystroke.key == "escape" {
-                    if this.playlist_dialog != PlaylistDialog::Closed {
-                        if !this.playlist_busy {
+                    if this.playlist_editor.dialog != PlaylistDialog::Closed {
+                        if !this.playlist_editor.busy {
                             this.close_playlist_dialog(cx);
                             window.focus(&this.playback_focus);
                         }
@@ -69,9 +74,9 @@ impl Render for MusicApp {
                         window.focus(&this.playback_focus);
                     }
                     this.dismiss_search_assist(cx);
-                    this.player_tools_open = false;
+                    this.panels.player_tools_open = false;
                     this.row_actions = None;
-                    this.side_panel_open = false;
+                    this.panels.side_panel_open = false;
                     this.close_comments(cx);
                     cx.notify();
                 } else {
@@ -115,24 +120,25 @@ impl Render for MusicApp {
             .when(self.show_account, |root| {
                 root.child(self.render_account_dropdown(cx))
             })
-            .when(self.playlist_dialog != PlaylistDialog::Closed, |root| {
-                root.child(modal)
-            })
+            .when(
+                self.playlist_editor.dialog != PlaylistDialog::Closed,
+                |root| root.child(modal),
+            )
             .into_any_element()
     }
 }
 
 impl MusicApp {
     pub(super) fn render_side_panel(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
-        if self.show_comments && self.comment_image.is_open() {
+        if self.panels.show_comments && self.comment_panel.image.is_open() {
             self.render_comment_image(cx)
-        } else if self.show_comments {
+        } else if self.panels.show_comments {
             self.render_comments_panel(cx)
-        } else if self.show_quality {
+        } else if self.panels.show_quality {
             self.render_quality_panel(cx)
-        } else if self.show_effects {
+        } else if self.panels.show_effects {
             self.render_effects_panel(false, cx)
-        } else if self.show_lyrics {
+        } else if self.panels.show_lyrics {
             self.render_lyrics_panel(cx)
         } else {
             self.render_queue_panel(cx)

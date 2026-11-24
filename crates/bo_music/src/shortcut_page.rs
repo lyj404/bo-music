@@ -35,16 +35,16 @@ impl MusicApp {
     ) {
         if self.auth.busy
             || self.show_account
-            || self.playlist_dialog != PlaylistDialog::Closed
+            || self.playlist_editor.dialog != PlaylistDialog::Closed
             || self.track_picker.is_some()
-            || self.confirm_clear_search_history
+            || self.search.confirm_clear_history
             || [
-                &self.input,
+                &self.search.input,
                 &self.phone_input,
                 &self.code_input,
-                &self.comment_input,
-                &self.playlist_name_input,
-                &self.playlist_description_input,
+                &self.comment_panel.input,
+                &self.playlist_editor.name_input,
+                &self.playlist_editor.description_input,
                 &self.preset_name_input,
                 &self.preset_description_input,
             ]

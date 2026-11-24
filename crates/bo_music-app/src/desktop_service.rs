@@ -1,24 +1,19 @@
 //! A dedicated Tokio thread owns networking and playback; GPUI never blocks on either.
-use crate::month_reports::{self, ReportCache, ReportResult};
+use crate::month_reports::{self, ReportCache};
 use crate::{
-    artwork::{ArtworkFetcher, ArtworkThumbnail},
+    artwork::ArtworkFetcher,
     auth::{self, Account, AuthError},
     batch_playlist::{self, BatchJob, BatchProgress},
-    browse::{
-        BrowseResult, BrowseView, Browser, CollectionState, CollectionTarget, DetailResult,
-        SearchKind,
-    },
-    comments::{CommentContext, CommentLike, Comments, CommentsView, PublishOutcome},
-    home::{Home, HomeView},
-    library::{LibrarySort, LibraryView, MusicLibrary},
-    likes::{LikeView, LikedSnapshot, LikedSongs},
-    mv::{AudioResume, MvCandidate, MvController},
+    browse::{Browser, SearchKind},
+    comments::{Comments, PublishOutcome},
+    home::Home,
+    library::MusicLibrary,
+    likes::LikedSongs,
+    mv::MvController,
     playback::{
-        ApplyOutcome, CurrentQuality, PlaybackCoordinator, PlaybackReport, Prefetcher,
-        QualityOutcome, QualityResult, QueueEdit, RecoveryOutcome, RecoveryResult,
-        ResolutionTicket, ResolvedTicket,
+        ApplyOutcome, PlaybackCoordinator, PlaybackReport, Prefetcher, QualityOutcome, QueueEdit,
+        RecoveryOutcome, ResolutionTicket,
     },
-    playlist_cover::{CoverEdit, CoverImage},
 };
 use bo_music_api::{
     account::{create_report_playlist_at_revision, overview_at_revision},
@@ -35,14 +30,9 @@ use bo_music_api::{
     telemetry::{self, PlayOperation},
     transport::{Transport, TransportOptions},
 };
-use bo_music_domain::account::{
-    AccountOverview, MonthAvailability, MonthPeriod, MonthReport, PlayRankingEntry,
-};
+use bo_music_domain::account::{MonthPeriod, MonthReport, PlayRankingEntry};
 use bo_music_domain::audio_effects::{AudioEffects, CustomPreset, MAX_CUSTOM_PRESETS, PRESETS};
-use bo_music_domain::catalog::{Album, Artist, CategoryGroup, LibraryGroup, Playlist};
-use bo_music_domain::comments::{CommentPage, CommentSort};
-use bo_music_domain::discovery::{AiPlaylist, Chart, HomeFeed, HomeModule};
-use bo_music_domain::lyrics::LyricDocument;
+use bo_music_domain::catalog::{CategoryGroup, Playlist};
 use bo_music_domain::paging::PagedCursor;
 use bo_music_domain::queue::PlayMode;
 use bo_music_domain::track::{AudioQuality, Track};
@@ -53,10 +43,8 @@ use bo_music_storage::{
     atomic,
     credentials::{CredentialError, CredentialStore, OsSecretBackend, SecretBackend},
     device,
-    history::HistoryStore,
     paths::DataPaths,
     queue::QueueStore,
-    search_history::SearchHistoryStore,
     settings::SettingsStore,
 };
 use std::{
@@ -84,442 +72,24 @@ pub use bo_music_storage::shortcuts::{
     Action as ShortcutAction, Gesture as ShortcutGesture, Shortcuts,
 };
 
-// Command groups share the worker's state and can skip the rest of its loop.
-// Assemble a single exhaustive match so new commands must have a handler.
-macro_rules! collect_command_arms {
-    ($command:ident [$($arms:tt)*] []) => { match $command { $($arms)* } };
-    ($command:ident $arms:tt [$handler:ident [$($args:tt)*] $($rest:tt)*]) => {
-        $handler!($command $arms [$($rest)*]; $($args)*)
-    };
-}
+mod messages;
+pub use messages::*;
 
 #[macro_use]
-#[path = "service_settings_and_reports.rs"]
-mod settings_and_reports_routes;
-#[macro_use]
-#[path = "service_accounts.rs"]
-mod accounts_routes;
-#[macro_use]
-#[path = "service_search_and_comments.rs"]
-mod search_and_comments_routes;
-#[macro_use]
-#[path = "service_playlist_edits.rs"]
-mod playlist_edits_routes;
-#[macro_use]
-#[path = "service_catalog.rs"]
-mod catalog_routes;
-#[macro_use]
-#[path = "service_playback.rs"]
-mod playback_routes;
-
-#[path = "service_audio.rs"]
+mod handlers;
 mod audio;
-#[path = "service_batch.rs"]
 mod batch;
-#[path = "service_runtime.rs"]
+mod history;
 mod runtime;
 use audio::{audio_filter, changed_audio_effects};
 use batch::{selected_tracks, start_batch, start_liked_batch};
-
-pub enum Command {
-    SaveAppearance(AppearanceSettings),
-    SaveMainWindow(FloatingBounds),
-    SaveLyricPosterStyle(LyricPosterStyle),
-    SaveShortcuts(Shortcuts),
-    ToggleMute,
-    OpenMv(u64, i64),
-    ControlMv(MvAction),
-    CloseMv,
-    MvLoaded(u64, Result<MvCandidate, &'static str>),
-    MvResumeAudio(AudioResume),
-    SaveFloatingWindows(FloatingWindows),
-    LoadMonthReport(u64, MonthPeriod),
-    RenderMonthPoster(u64, u64, MonthPosterStyle),
-    MonthPosterDone(u64, u64, u64, Result<Vec<u8>, ()>),
-    SaveMonthPoster(u64, u64, PathBuf),
-    MonthPosterSaved(u64, u64, u64, bool),
-    ProbeMonthReports(u64, MonthPeriod, MonthPeriod),
-    ProbeMonthReportResult(u64, u64, MonthPeriod, ReportResult),
-    ProbeMonthReportsFinished(u64, u64),
-    CloseMonthReport(u64),
-    MonthReportDone(u64, u64, MonthPeriod, Result<Option<Box<MonthReport>>, ()>),
-    CreateMonthPlaylist(u64, MonthPeriod),
-    MonthPlaylistDone(u64, MonthPeriod, bool),
-    PlayMonthTrack(u64, i64),
-    MonthTrackDone(u64, u64, Option<Box<Track>>),
-    LoadAccountOverview(u64),
-    AccountOverviewDone(u64, u64, Box<Result<AccountOverview, ()>>),
-    PlayWeeklyTrack(u64, usize, i64),
-    LoadArtwork(String),
-    LoadCommentImage(u64, u64, i64, bool),
-    CommentImageDone(u64, u64, u64, i64, Result<Vec<u8>, ()>),
-    SaveCommentImage(u64, PathBuf),
-    SearchSuggestions(u64, String),
-    LoadSearchHotWords,
-    LoadSearchHistory,
-    ClearSearchHistory,
-    SearchHistoryDone(u64, Result<Vec<String>, String>),
-    SearchOverview(u64, String),
-    SearchOverviewDone(u64, u64, Result<Vec<SearchSection>, ()>),
-    SelectSearchOverview(u64, usize, usize),
-    StartQr,
-    CancelQr,
-    QrUpdate(u64, QrUpdate),
-    RequestSms(String),
-    SmsDone(Result<SmsOutcome, String>),
-    LoginPhone(String, String),
-    PhoneDone(Result<ExchangeOutcome, String>),
-    SignOut,
-    SwitchAccount(String),
-    ForgetAccount(String),
-    RetryAccountCleanup,
-    RefreshAccounts,
-    AccountsDone(u64, Result<AccountList, ()>),
-    AuthDone(AuthOperation, Result<Option<Account>, AuthError>),
-    #[cfg(windows)]
-    LegacyCredentialNotice,
-    Search(String),
-    SearchNext,
-    ShowHistory,
-    PlaylistSquare,
-    SelectPlaylistCategory(i64, u64),
-    HistoryDone(u64, u64, Result<Vec<Track>, String>),
-    HistoryRecorded(u64),
-    SearchPlaylists(String),
-    SearchAlbums(String),
-    SearchArtists(String),
-    MyPlaylists,
-    Collections(SearchKind),
-    LoadCollectionState,
-    ToggleCollection,
-    CollectionStateDone(u64, u64, CollectionTarget, CollectionState),
-    CollectionWriteDone(u64, CollectionTarget, bool, bool),
-    ToggleLike(i64),
-    RetryLike(i64),
-    LikedLoadDone(u64, u64, Result<LikedSnapshot, ()>),
-    LikedWriteDone(u64, i64, bool, bool),
-    StartPlaylistEdit(i64),
-    LoadPlaylistCover(u64, PathBuf),
-    PlaylistEditLoaded(
-        u64,
-        u64,
-        i64,
-        Result<Option<Playlist>, ()>,
-        Option<Vec<CategoryGroup>>,
-    ),
-    CreatePlaylist(String, bool),
-    SavePlaylist(i64, String, String, Vec<i32>, Option<CoverEdit>),
-    DeletePlaylist(i64),
-    PlaylistMutationDone(u64, Result<PlaylistMutationResult, PlaylistMutationError>),
-    OpenTrackPicker(Track),
-    OpenBatchPicker(BatchSource, Vec<(usize, i64)>),
-    LikeSelected(BatchSource, Vec<(usize, i64)>),
-    AddPickedTracks(u64, i64),
-    RemoveSelectedTracks(i64, u64, Vec<(usize, i64)>),
-    CancelBatch,
-    BatchProgress(u64, BatchProgress),
-    BatchDone(u64, i64, BatchAction, Option<u64>, BatchProgress),
-    BatchPreparationFailed(u64, &'static str),
-    CloseTrackPicker,
-    TrackPickerLoaded(u64, u64, Result<Vec<Playlist>, ()>),
-    AddTrackToPlaylist(i64, i64),
-    RemovePlaylistTrack(i64, usize, i64, u64),
-    TrackMutationDone(u64, TrackMutation, bool),
-    OpenComments,
-    CloseComments,
-    CommentSort(CommentSort, u64),
-    CommentsNext(u64),
-    CommentsRefresh(u64),
-    OpenCommentThread(i64, u64),
-    CloseCommentThread(u64),
-    ReplyToComment(i64, u64),
-    ClearCommentReply(u64),
-    ToggleCommentLike(i64, u64),
-    PublishComment(u64, String, bool),
-    CommentsPageDone(u64, CommentContext, Option<i64>, Result<CommentPage, ()>),
-    CommentLikeDone(CommentLike, bool),
-    CommentPublishDone(CommentContext, PublishOutcome),
-    ShareCurrent(u64, u64, i64),
-    ShareDetail(u64),
-    ShareReportDone(u64, i64, Result<ShareOutcome, ()>),
-    LoadHome,
-    HomeNext,
-    HomeRefresh(usize, u64),
-    HomeOpenAi(usize, usize, u64),
-    HomeCloseAi(u64),
-    HomeOpenPlaylist(usize, usize, i64, u64),
-    HomePlay(Option<usize>, usize, i64, u64),
-    HomePlayAll(u64),
-    HomeQueueModule(usize, u64, u64, u64),
-    HomeLayoutDone(u64, u64, Result<Vec<HomeModule>, ()>),
-    HomeBatchDone(
-        u64,
-        u64,
-        usize,
-        Vec<(HomeModule, Result<Option<HomeFeed>, ()>)>,
-    ),
-    HomeRefreshDone(u64, u64, usize, Result<Option<HomeFeed>, ()>),
-    HomeAiDone(u64, u64, u64, Result<Option<AiPlaylist>, ()>),
-    LoadLibrary,
-    LibrarySelectGroup(usize, u64),
-    LibrarySelectChild(usize, u64),
-    LibrarySort(LibrarySort, u64),
-    LibraryBack(u64),
-    LibraryNext(u64),
-    LibraryOpenAlbum(Option<usize>, i64, u64),
-    LibraryNavigationDone(u64, u64, Result<Vec<LibraryGroup>, ()>),
-    LibraryAlbumsDone(u64, u64, PagedCursor, Result<Vec<Album>, ()>),
-    Charts,
-    OpenChart(Chart),
-    OpenPlaylist(Playlist),
-    OpenAlbum(Album),
-    OpenArtist(Artist),
-    ArtistTracks,
-    ArtistAlbums,
-    LoadDetails,
-    DetailDone(u64, u64, Result<DetailResult, String>),
-    BrowseBack,
-    BrowseNext,
-    PlayAllPlaylist,
-    BrowseDone(u64, u64, Result<BrowseResult, String>),
-    Play(Vec<Track>, usize),
-    PlaySingle(Track),
-    PlayBrowse(usize, i64, u64),
-    Toggle,
-    SetPlaying(bool),
-    Stop,
-    Next,
-    Previous,
-    EditQueue(u64, u64, QueueEdit),
-    EditBrowseQueue(u64, u64, usize, i64, u64, bool),
-    SeekRelative(i32),
-    SeekTo(u64, i64, f64),
-    SeekFromMedia(u64, i64, i64),
-    SetVolume(f64),
-    SetPlayMode(PlayMode),
-    RaiseMainWindow,
-    ExitApplication,
-    VolumeDelta(i32),
-    AudioEffect(AudioEffectAction),
-    SetPreferredQuality(AudioQuality),
-    SwitchQuality(AudioQuality),
-    QualityResolved(QualityResult),
-    CycleMode,
-    SearchDone(u64, PagedCursor, Result<Vec<Track>, String>),
-    LyricsDone(u64, Result<LyricDocument, String>),
-    Resolved(ResolvedTicket),
-    RecoveryResolved(RecoveryResult),
-    Shutdown,
-}
-
-pub enum AudioEffectAction {
-    Toggle,
-    Select(String),
-    AdjustBand(usize, f64),
-    SelectAmbient(String),
-    AdjustAmbientVolume(f64),
-    CreateCustom { name: String, description: String },
-    RenameCustom { name: String, description: String },
-    DeleteCustom,
-    ResetBands,
-    Set(AudioEffects),
-}
-
-#[derive(Clone, PartialEq)]
-pub struct PlayerView {
-    pub track_id: Option<i64>,
-    pub cover_url: Option<String>,
-    pub queue_account_revision: u64,
-    pub queue_revision: u64,
-    pub queue_reorderable: bool,
-    pub can_go_next: bool,
-    pub can_go_previous: bool,
-    pub state: PlaybackState,
-    pub recovering: bool,
-    pub title: String,
-    pub artist: String,
-    pub album: Option<String>,
-    pub position: u64,
-    pub position_ms: u64,
-    pub duration: u64,
-    pub duration_ms: u64,
-    pub queue: Vec<String>,
-    pub selected: Option<usize>,
-    pub mode: PlayMode,
-    pub volume: u8,
-    pub audio_effects: AudioEffects,
-    pub audio_filter_failed: bool,
-    pub preferred_quality: AudioQuality,
-    pub current_quality: Option<CurrentQuality>,
-    pub available_qualities: Vec<AudioQuality>,
-    pub changing_quality: bool,
-    pub can_change_quality: bool,
-}
-
-pub enum Event {
-    Appearance(AppearanceSettings),
-    AppearanceSaved(bool),
-    LyricPosterStyle(LyricPosterStyle),
-    #[cfg(windows)]
-    LegacyFloatingWindows(LegacyFloatingWindows),
-    Shortcuts(Shortcuts),
-    ShortcutsSaved(bool),
-    Mv(Option<MvView>),
-    ActivateMainWindow,
-    ExitApplication,
-    LinuxTrayAvailable(bool),
-    FloatingWindows(FloatingWindows),
-    CommentImage(u64, Result<Arc<Vec<u8>>, ()>),
-    CommentImageSaved(u64, bool),
-    MonthPoster(u64, u64, Result<Arc<Vec<u8>>, ()>),
-    MonthPosterSaved(u64, u64, bool),
-    MonthReport(u64, Result<Option<Box<MonthReport>>, ()>),
-    MonthAvailability(u64, MonthPeriod, MonthAvailability),
-    MonthAvailabilityFinished(u64),
-    MonthPlaylist(MonthPeriod, bool),
-    AccountOverview(u64, Box<Result<AccountOverview, ()>>),
-    SearchSuggestions(u64, Vec<String>),
-    SearchHotWords(Option<Vec<String>>),
-    SearchHistory(Result<Vec<String>, String>),
-    SearchOverview(u64, Result<Vec<SearchSection>, ()>),
-    SearchOverviewOpened(u64),
-    Artwork(String, Result<ArtworkThumbnail, ()>),
-    Qr(QrView),
-    Auth(AuthView),
-    Accounts(AccountList),
-    Status(String),
-    Search(SearchView),
-    History(HistoryView),
-    HistoryChanged,
-    Browse(BrowseView),
-    Lyrics(LyricsView),
-    Like(LikeView),
-    PlaylistEditReady(Playlist, Option<Vec<CategoryGroup>>),
-    PlaylistCoverPreview(u64, Result<Arc<CoverImage>, ()>),
-    PlaylistEditFailed,
-    PlaylistMutationBusy(bool),
-    PlaylistMutationFinished(Option<PlaylistMutationResult>),
-    TrackPicker(Option<PlaylistPickerView>),
-    BatchProgress(Option<BatchProgress>),
-    Comments(Box<CommentsView>),
-    CommentPostResult(u64, bool),
-    CopyShareLink(String),
-    Home(HomeView),
-    HomePlaylistOpened,
-    Library(LibraryView),
-    LibraryAlbumOpened,
-    Player(PlayerView),
-}
-
-#[derive(Clone)]
-pub enum PlaylistMutationResult {
-    Created {
-        id: i64,
-        name: String,
-        private: bool,
-    },
-    Edited {
-        id: i64,
-        name: String,
-        description: String,
-        cover_url: Option<String>,
-    },
-    Deleted {
-        id: i64,
-    },
-}
-
-pub enum PlaylistMutationError {
-    InvalidCover,
-    Uncertain,
-}
-
-#[derive(Clone)]
-pub struct PlaylistPickerView {
-    pub track_id: i64,
-    pub track_title: String,
-    pub generation: u64,
-    pub track_count: usize,
-    pub playlists: Vec<Playlist>,
-    pub loading: bool,
-    pub busy: bool,
-    pub error: Option<String>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BatchSource {
-    Browse(u64),
-    Search(u64),
-    History(u64),
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BatchAction {
-    Add,
-    Remove,
-    Like,
-}
+use history::{HistoryWork, SearchHistoryAction, history_worker};
 
 struct PlaylistPickerState {
     revision: u64,
     generation: u64,
     track_ids: Vec<i64>,
     view: PlaylistPickerView,
-}
-
-#[derive(Clone, Copy)]
-pub struct TrackMutation {
-    playlist_id: i64,
-    track_id: i64,
-    add: bool,
-    picker_generation: Option<u64>,
-}
-
-/// QR contents include a short-lived login secret and must not be logged.
-pub enum QrView {
-    Idle,
-    Loading,
-    Ready(String),
-    Expired,
-    Failed,
-}
-
-pub enum QrUpdate {
-    Ready(String),
-    Expired,
-    Failed,
-    Complete(ExchangeOutcome),
-}
-
-#[derive(Clone, Copy)]
-pub enum AuthOperation {
-    Restore,
-    Login,
-    SignOut,
-    Expired,
-    Switch,
-    Forget,
-    Cleanup,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AccountEntry {
-    pub uid: String,
-    pub nickname: Option<String>,
-    pub stale: bool,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct AccountList {
-    pub entries: Vec<AccountEntry>,
-    pub cleanup_pending: bool,
-}
-
-#[derive(Clone)]
-pub struct AuthView {
-    pub account: Option<Account>,
-    pub busy: bool,
-    pub message: String,
 }
 
 type SharedSecrets = Arc<dyn SecretBackend + Send + Sync>;
@@ -544,112 +114,6 @@ fn auth_view(
         busy,
         message: message.into(),
     }));
-}
-
-pub enum LyricsView {
-    Empty,
-    Loading,
-    Ready(LyricDocument),
-    Failed,
-}
-
-pub struct SearchView {
-    pub generation: u64,
-    pub tracks: Vec<Track>,
-    pub has_more: bool,
-    pub loading: bool,
-}
-
-pub struct HistoryView {
-    pub generation: u64,
-    pub tracks: Vec<Track>,
-    pub loading: bool,
-    pub error: Option<String>,
-}
-
-enum HistoryWork {
-    Search {
-        scope: String,
-        revision: u64,
-        action: SearchHistoryAction,
-    },
-    Load {
-        scope: String,
-        generation: u64,
-        revision: u64,
-    },
-    Record {
-        scope: String,
-        track: Box<Track>,
-        revision: u64,
-    },
-}
-
-enum SearchHistoryAction {
-    Load,
-    Record(String),
-    Clear,
-}
-
-fn history_worker(
-    paths: DataPaths,
-    commands: mpsc::UnboundedSender<Command>,
-    events: std_mpsc::Sender<Event>,
-) -> (std_mpsc::Sender<HistoryWork>, std::thread::JoinHandle<()>) {
-    let (sender, receiver) = std_mpsc::channel();
-    let worker = std::thread::spawn(move || {
-        let store = HistoryStore::new(paths.clone());
-        let search_store = SearchHistoryStore::new(paths);
-        while let Ok(work) = receiver.recv() {
-            match work {
-                HistoryWork::Search {
-                    scope,
-                    revision,
-                    action,
-                } => {
-                    let result = match action {
-                        SearchHistoryAction::Load => {
-                            search_store.load(&scope).map_err(|_| "无法读取搜索历史")
-                        }
-                        SearchHistoryAction::Record(keyword) => search_store
-                            .record(&scope, keyword)
-                            .map_err(|_| "无法保存搜索历史"),
-                        SearchHistoryAction::Clear => search_store
-                            .clear(&scope)
-                            .map(|()| Vec::new())
-                            .map_err(|_| "无法清空搜索历史"),
-                    };
-                    let _ = commands.send(Command::SearchHistoryDone(
-                        revision,
-                        result.map_err(str::to_owned),
-                    ));
-                }
-                HistoryWork::Load {
-                    scope,
-                    generation,
-                    revision,
-                } => {
-                    let result = store
-                        .load(&scope)
-                        .map_err(|_| "读取最近播放失败".to_owned());
-                    let _ = commands.send(Command::HistoryDone(generation, revision, result));
-                }
-                HistoryWork::Record {
-                    scope,
-                    track,
-                    revision,
-                } => {
-                    if store.record(&scope, &track).is_err() {
-                        let _ =
-                            events.send(Event::Status("保存最近播放失败，请检查数据目录".into()));
-                    } else {
-                        let _ = commands.send(Command::HistoryRecorded(revision));
-                    }
-                }
-            }
-        }
-    });
-    (sender, worker)
 }
 
 pub struct Service {

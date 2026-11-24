@@ -377,6 +377,9 @@ async fn next_track_reuses_the_inflight_prefetch() {
 async fn cache_retains_eight_results_expires_and_evicts_failed_sources() {
     let (app, _, session) = controller();
     let mut prefetch = Prefetcher::default();
+    // Build a synthetic timeline forwards; subtracting from Instant::now() can
+    // underflow on a freshly booted Windows runner.
+    let started = Instant::now();
     for id in 1..=9 {
         let ticket = ResolutionTicket {
             generation: 0,
@@ -390,7 +393,7 @@ async fn cache_retains_eight_results_expires_and_evicts_failed_sources() {
         let task = tokio::spawn(async move { result });
         prefetch.entry = Some(PrefetchEntry {
             key,
-            started: Instant::now() - Duration::from_secs((10 - id) as u64),
+            started: started + Duration::from_secs(id as u64),
             task,
         });
         while !prefetch.entry.as_ref().unwrap().task.is_finished() {
@@ -417,9 +420,14 @@ async fn cache_retains_eight_results_expires_and_evicts_failed_sources() {
         .iter_mut()
         .find(|entry| entry.key.track.id == 4)
         .unwrap();
-    expired.started = Instant::now() - PREFETCH_TTL - Duration::from_secs(1);
-    prefetch.reconcile(None);
+    expired.started = started;
+    let expires_at = started + PREFETCH_TTL;
+    prefetch.prune_at(expires_at);
+    assert!(prefetch.cache.iter().any(|entry| entry.key.track.id == 4));
+    prefetch.prune_at(expires_at + Duration::from_secs(1));
     assert!(!prefetch.cache.iter().any(|entry| entry.key.track.id == 4));
+    assert_eq!(prefetch.cache.len(), PREFETCH_CAPACITY - 1);
+    assert!(prefetch.cache.iter().any(|entry| entry.key.track.id == 3));
     let retry = ResolutionTicket {
         generation: 4,
         revision: session.snapshot().revision,
@@ -556,16 +564,17 @@ async fn expired_or_wrong_account_prefetch_is_cancelled() {
     let key = candidate.key();
     let task = tokio::spawn(std::future::pending::<ResolvedTicket>());
     let abort = task.abort_handle();
+    let started = Instant::now();
     let mut prefetch = Prefetcher {
-        entry: Some(PrefetchEntry {
-            key,
-            started: Instant::now() - PREFETCH_TTL - Duration::from_secs(1),
-            task,
-        }),
+        entry: Some(PrefetchEntry { key, started, task }),
         ..Default::default()
     };
     let ticket = app.next_track().unwrap().unwrap();
-    assert!(prefetch.take_for(&ticket).is_none());
+    assert!(
+        prefetch
+            .take_for_at(&ticket, started + PREFETCH_TTL + Duration::from_secs(1))
+            .is_none()
+    );
     tokio::task::yield_now().await;
     assert!(abort.is_finished());
 

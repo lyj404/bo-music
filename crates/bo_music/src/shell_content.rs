@@ -11,15 +11,15 @@ impl MusicApp {
             .player
             .as_ref()
             .map(|p| (p.queue_account_revision, p.queue_revision));
-        let list_source = if self.page == Page::Recent {
+        let list_source = if self.navigation.page == Page::Recent {
             BatchSource::History(self.history_generation)
         } else {
-            BatchSource::Search(self.search_generation)
+            BatchSource::Search(self.search.generation)
         };
-        let rows = if self.page == Page::Recent {
+        let rows = if self.navigation.page == Page::Recent {
             &self.recent_tracks
         } else {
-            &self.tracks
+            &self.search.tracks
         }
         .iter()
         .enumerate()
@@ -46,10 +46,10 @@ impl MusicApp {
                 .rounded_md()
                 .hover(|style| style.bg(rgb(0xe9edf5)).cursor_pointer())
                 .on_click(cx.listener(move |this, _, _, _| {
-                    let tracks = if this.page == Page::Recent {
+                    let tracks = if this.navigation.page == Page::Recent {
                         &this.recent_tracks
                     } else {
-                        &this.tracks
+                        &this.search.tracks
                     };
                     let _ = this
                         .service
@@ -195,10 +195,10 @@ impl MusicApp {
                 })
         })
         .collect::<Vec<_>>();
-        let list_tracks = if self.page == Page::Recent {
+        let list_tracks = if self.navigation.page == Page::Recent {
             &self.recent_tracks
         } else {
-            &self.tracks
+            &self.search.tracks
         };
         let mut list_selected = if self.batch_generation == Some(list_source) {
             self.batch_selection.iter().copied().collect::<Vec<_>>()
@@ -247,7 +247,7 @@ impl MusicApp {
                 )
             })
             .when(
-                list_count > 0 && !self.playlist_busy && !self.auth.busy,
+                list_count > 0 && !self.playlist_editor.busy && !self.auth.busy,
                 |bar| {
                     bar.child(
                         div()
@@ -265,7 +265,7 @@ impl MusicApp {
                 },
             )
             .when(
-                list_count > 0 && !self.playlist_busy && !self.auth.busy,
+                list_count > 0 && !self.playlist_editor.busy && !self.auth.busy,
                 |bar| {
                     bar.child(
                         div()
@@ -283,16 +283,18 @@ impl MusicApp {
                 },
             );
         let browse_body = self.render_browse_content(queue_stamp, compact, cx);
-        let home_body = if self.page == Page::Home && !self.home_playlist_open {
+        let home_body = if self.navigation.page == Page::Home && !self.navigation.home_playlist_open
+        {
             self.render_home(compact, cx)
         } else {
             div().into_any_element()
         };
-        let library_body = if self.page == Page::Library && !self.library_album_open {
-            self.render_library(cx)
-        } else {
-            div().into_any_element()
-        };
+        let library_body =
+            if self.navigation.page == Page::Library && !self.navigation.library_album_open {
+                self.render_library(cx)
+            } else {
+                div().into_any_element()
+            };
         let side_body = self.render_side_panel(cx);
         div()
             .relative()
@@ -314,7 +316,7 @@ impl MusicApp {
                     .py_4()
                     .when(
                         matches!(
-                            self.page,
+                            self.navigation.page,
                             Page::Overview
                                 | Page::Tracks
                                 | Page::PlaylistSearch
@@ -330,7 +332,7 @@ impl MusicApp {
                                         .text_sm()
                                         .text_color(rgb(0x788196))
                                         .mb_4()
-                                        .child(self.input.read(cx).text().to_owned()),
+                                        .child(self.search.input.read(cx).text().to_owned()),
                                 )
                                 .child(
                                     div()
@@ -356,19 +358,21 @@ impl MusicApp {
                                                         .id(("search-kind", index))
                                                         .py_2()
                                                         .cursor_pointer()
-                                                        .text_color(rgb(if self.page == page {
-                                                            0x20293a
-                                                        } else {
-                                                            0x788196
-                                                        }))
-                                                        .when(self.page == page, |tab| {
+                                                        .text_color(rgb(
+                                                            if self.navigation.page == page {
+                                                                0x20293a
+                                                            } else {
+                                                                0x788196
+                                                            },
+                                                        ))
+                                                        .when(self.navigation.page == page, |tab| {
                                                             tab.border_b_2()
                                                                 .border_color(rgb(0x415de5))
                                                         })
                                                         .child(label)
                                                         .on_click(cx.listener(
                                                             move |this, _, _, cx| {
-                                                                this.page = page;
+                                                                this.navigation.page = page;
                                                                 this.run_search(cx);
                                                             },
                                                         ))
@@ -378,14 +382,18 @@ impl MusicApp {
                                 )
                         },
                     )
-                    .when(self.page == Page::Recent, |panel| {
+                    .when(self.navigation.page == Page::Recent, |panel| {
                         panel
                             .child(ui::eyebrow("LISTENING HISTORY", cx))
                             .child(ui::heading("最近播放", cx).mt_1().mb_5())
                     })
                     .when(
-                        self.page == Page::Collection
-                            && !self.browse.as_ref().is_some_and(|view| view.is_detail),
+                        self.navigation.page == Page::Collection
+                            && !self
+                                .navigation
+                                .browse
+                                .as_ref()
+                                .is_some_and(|view| view.is_detail),
                         |panel| {
                             panel.child(
                                 div().flex().gap_4().pb_3().children(
@@ -400,14 +408,16 @@ impl MusicApp {
                                         div()
                                             .id(("collection-kind", index))
                                             .cursor_pointer()
-                                            .text_color(if self.collection_kind == kind {
-                                                rgb(0x415de5)
-                                            } else {
-                                                rgb(0x687083)
-                                            })
+                                            .text_color(
+                                                if self.navigation.collection_kind == kind {
+                                                    rgb(0x415de5)
+                                                } else {
+                                                    rgb(0x687083)
+                                                },
+                                            )
                                             .child(label)
                                             .on_click(cx.listener(move |this, _, _, cx| {
-                                                this.collection_kind = kind;
+                                                this.navigation.collection_kind = kind;
                                                 let _ = this
                                                     .service
                                                     .commands
@@ -421,31 +431,28 @@ impl MusicApp {
                         },
                     )
                     .when(
-                        self.page == Page::Home && !self.home_playlist_open,
+                        self.navigation.page == Page::Home && !self.navigation.home_playlist_open,
                         |panel| panel.child(home_body),
                     )
                     .when(
-                        self.page == Page::Library && !self.library_album_open,
+                        self.navigation.page == Page::Library
+                            && !self.navigation.library_album_open,
                         |panel| panel.child(library_body),
                     )
                     .when(
-                        self.page == Page::Overview && !self.overview_detail_open,
+                        self.navigation.page == Page::Overview
+                            && !self.navigation.overview_detail_open,
                         |panel| panel.child(self.render_search_overview(cx)),
                     )
-                    .when(self.page == Page::AccountOverview, |panel| {
+                    .when(self.navigation.page == Page::AccountOverview, |panel| {
                         panel.child(self.render_account_overview(compact, cx))
                     })
+                    .when(self.navigation.browse_is_visible(), |panel| {
+                        panel.child(browse_body)
+                    })
                     .when(
-                        self.page != Page::Tracks
-                            && self.page != Page::Recent
-                            && self.page != Page::AccountOverview
-                            && (self.page != Page::Overview || self.overview_detail_open)
-                            && (self.page != Page::Home || self.home_playlist_open)
-                            && (self.page != Page::Library || self.library_album_open),
-                        |panel| panel.child(browse_body),
-                    )
-                    .when(
-                        self.page == Page::Tracks || self.page == Page::Recent,
+                        self.navigation.page == Page::Tracks
+                            || self.navigation.page == Page::Recent,
                         |panel| {
                             panel.child(list_batch_toolbar).child(
                                 div()
@@ -455,7 +462,7 @@ impl MusicApp {
                                     .overflow_y_scroll()
                                     .when(rows.is_empty(), |view| {
                                         view.child(div().p_6().text_color(rgb(0x8a91a2)).child(
-                                            if self.page == Page::Recent {
+                                            if self.navigation.page == Page::Recent {
                                                 if self.recent_loading {
                                                     "正在加载最近播放…".to_owned()
                                                 } else {
@@ -470,7 +477,8 @@ impl MusicApp {
                                     })
                                     .children(rows)
                                     .when(
-                                        self.page == Page::Recent && self.recent_error.is_some(),
+                                        self.navigation.page == Page::Recent
+                                            && self.recent_error.is_some(),
                                         |view| {
                                             view.child(
                                                 div()
@@ -489,30 +497,33 @@ impl MusicApp {
                                         },
                                     )
                                     .when(
-                                        self.page == Page::Tracks
-                                            && (self.has_more || self.search_loading),
+                                        self.navigation.page == Page::Tracks
+                                            && (self.search.has_more || self.search.loading),
                                         |view| {
                                             view.child(
-                                                div()
-                                                    .id("more")
-                                                    .p_3()
-                                                    .text_center()
-                                                    .text_color(rgb(0x415de5))
-                                                    .child(if self.search_loading {
+                                                ui::icon_button_labeled(
+                                                    "more",
+                                                    "refresh",
+                                                    if self.search.loading {
                                                         "正在加载…"
                                                     } else {
                                                         "加载更多"
-                                                    })
-                                                    .when(!self.search_loading, |button| {
-                                                        button.cursor_pointer().on_click(
-                                                            cx.listener(|this, _, _, _| {
-                                                                let _ = this
-                                                                    .service
-                                                                    .commands
-                                                                    .send(Command::SearchNext);
-                                                            }),
-                                                        )
-                                                    }),
+                                                    },
+                                                    cx,
+                                                )
+                                                .when(self.search.loading, |button| {
+                                                    button.opacity(0.45).cursor_default()
+                                                })
+                                                .when(!self.search.loading, |button| {
+                                                    button.cursor_pointer().on_click(cx.listener(
+                                                        |this, _, _, _| {
+                                                            let _ = this
+                                                                .service
+                                                                .commands
+                                                                .send(Command::SearchNext);
+                                                        },
+                                                    ))
+                                                }),
                                             )
                                         },
                                     ),
@@ -520,7 +531,7 @@ impl MusicApp {
                         },
                     ),
             )
-            .when(self.side_panel_open, |root| {
+            .when(self.panels.side_panel_open, |root| {
                 root.child(
                     div()
                         .absolute()
@@ -550,7 +561,7 @@ impl MusicApp {
                                 )
                                 .child(ui::icon_button("close-side-panel", "close", cx).on_click(
                                     cx.listener(|this, _, _, cx| {
-                                        this.side_panel_open = false;
+                                        this.panels.side_panel_open = false;
                                         this.close_comments(cx);
                                         cx.notify();
                                     }),
@@ -606,10 +617,10 @@ impl MusicApp {
                                         .py_1()
                                         .rounded_md()
                                         .when(
-                                            self.show_lyrics
-                                                && !self.show_effects
-                                                && !self.show_quality
-                                                && !self.show_comments,
+                                            self.panels.show_lyrics
+                                                && !self.panels.show_effects
+                                                && !self.panels.show_quality
+                                                && !self.panels.show_comments,
                                             |item| {
                                                 item.bg(rgb(0xe9edff))
                                                     .font_weight(gpui::FontWeight::SEMIBOLD)
@@ -617,10 +628,10 @@ impl MusicApp {
                                         )
                                         .cursor_pointer()
                                         .text_color(
-                                            if self.show_lyrics
-                                                && !self.show_effects
-                                                && !self.show_quality
-                                                && !self.show_comments
+                                            if self.panels.show_lyrics
+                                                && !self.panels.show_effects
+                                                && !self.panels.show_quality
+                                                && !self.panels.show_comments
                                             {
                                                 rgb(0x415de5)
                                             } else {
@@ -630,9 +641,9 @@ impl MusicApp {
                                         .child("歌词")
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.close_comments(cx);
-                                            this.show_lyrics = true;
-                                            this.show_effects = false;
-                                            this.show_quality = false;
+                                            this.panels.show_lyrics = true;
+                                            this.panels.show_effects = false;
+                                            this.panels.show_quality = false;
                                             if let Some(index) = this.lyric_line {
                                                 this.lyric_scroll.scroll_to_item(index);
                                             }
@@ -646,10 +657,10 @@ impl MusicApp {
                                         .py_1()
                                         .rounded_md()
                                         .when(
-                                            !self.show_lyrics
-                                                && !self.show_effects
-                                                && !self.show_quality
-                                                && !self.show_comments,
+                                            !self.panels.show_lyrics
+                                                && !self.panels.show_effects
+                                                && !self.panels.show_quality
+                                                && !self.panels.show_comments,
                                             |item| {
                                                 item.bg(rgb(0xe9edff))
                                                     .font_weight(gpui::FontWeight::SEMIBOLD)
@@ -657,10 +668,10 @@ impl MusicApp {
                                         )
                                         .cursor_pointer()
                                         .text_color(
-                                            if self.show_lyrics
-                                                || self.show_effects
-                                                || self.show_quality
-                                                || self.show_comments
+                                            if self.panels.show_lyrics
+                                                || self.panels.show_effects
+                                                || self.panels.show_quality
+                                                || self.panels.show_comments
                                             {
                                                 rgb(0x8a91a2)
                                             } else {
@@ -670,9 +681,9 @@ impl MusicApp {
                                         .child("队列")
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.close_comments(cx);
-                                            this.show_lyrics = false;
-                                            this.show_effects = false;
-                                            this.show_quality = false;
+                                            this.panels.show_lyrics = false;
+                                            this.panels.show_effects = false;
+                                            this.panels.show_quality = false;
                                             cx.notify();
                                         })),
                                 )
@@ -682,12 +693,12 @@ impl MusicApp {
                                         .px_2()
                                         .py_1()
                                         .rounded_md()
-                                        .when(self.show_effects, |item| {
+                                        .when(self.panels.show_effects, |item| {
                                             item.bg(rgb(0xe9edff))
                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                         })
                                         .cursor_pointer()
-                                        .text_color(if self.show_effects {
+                                        .text_color(if self.panels.show_effects {
                                             rgb(0x415de5)
                                         } else {
                                             rgb(0x8a91a2)
@@ -695,8 +706,8 @@ impl MusicApp {
                                         .child("音效")
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.close_comments(cx);
-                                            this.show_effects = true;
-                                            this.show_quality = false;
+                                            this.panels.show_effects = true;
+                                            this.panels.show_quality = false;
                                             cx.notify();
                                         })),
                                 )
@@ -706,12 +717,12 @@ impl MusicApp {
                                         .px_2()
                                         .py_1()
                                         .rounded_md()
-                                        .when(self.show_quality, |item| {
+                                        .when(self.panels.show_quality, |item| {
                                             item.bg(rgb(0xe9edff))
                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                         })
                                         .cursor_pointer()
-                                        .text_color(if self.show_quality {
+                                        .text_color(if self.panels.show_quality {
                                             rgb(0x415de5)
                                         } else {
                                             rgb(0x8a91a2)
@@ -719,8 +730,8 @@ impl MusicApp {
                                         .child("音质")
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.close_comments(cx);
-                                            this.show_quality = true;
-                                            this.show_effects = false;
+                                            this.panels.show_quality = true;
+                                            this.panels.show_effects = false;
                                             cx.notify();
                                         })),
                                 )
@@ -730,23 +741,23 @@ impl MusicApp {
                                         .px_2()
                                         .py_1()
                                         .rounded_md()
-                                        .when(self.show_comments, |item| {
+                                        .when(self.panels.show_comments, |item| {
                                             item.bg(rgb(0xe9edff))
                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                         })
                                         .cursor_pointer()
-                                        .text_color(if self.show_comments {
+                                        .text_color(if self.panels.show_comments {
                                             rgb(0x415de5)
                                         } else {
                                             rgb(0x8a91a2)
                                         })
                                         .child("评论")
                                         .on_click(cx.listener(|this, _, _, cx| {
-                                            if !this.show_comments {
-                                                this.show_comments = true;
-                                                this.show_effects = false;
-                                                this.show_quality = false;
-                                                this.show_lyrics = false;
+                                            if !this.panels.show_comments {
+                                                this.panels.show_comments = true;
+                                                this.panels.show_effects = false;
+                                                this.panels.show_quality = false;
+                                                this.panels.show_lyrics = false;
                                                 let _ = this
                                                     .service
                                                     .commands

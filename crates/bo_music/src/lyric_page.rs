@@ -260,7 +260,7 @@ impl MusicApp {
     }
 
     pub(super) fn open_immersive_lyrics(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.player_tools_open = false;
+        self.panels.player_tools_open = false;
         let page = &mut self.lyric_page;
         page.open = true;
         page.restore_fullscreen = window.is_fullscreen();
@@ -280,7 +280,7 @@ impl MusicApp {
         if window.is_fullscreen() != page.restore_fullscreen {
             window.toggle_fullscreen();
         }
-        window.focus(&self.input.read(cx).focus_handle(cx));
+        window.focus(&self.search.input.read(cx).focus_handle(cx));
         cx.notify();
     }
 

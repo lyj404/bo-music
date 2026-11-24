@@ -8,8 +8,8 @@ impl MusicApp {
     ) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
         let account_open = self.show_account;
-        let history_open = self.show_search_history && !self.search_assist_dismissed;
-        let hot_open = self.show_hot_words && !self.search_assist_dismissed;
+        let history_open = self.search.show_history && !self.search.assist_dismissed;
+        let hot_open = self.search.show_hot_words && !self.search.assist_dismissed;
         let account_label = self
             .auth
             .account
@@ -24,21 +24,12 @@ impl MusicApp {
             .flex()
             .items_center()
             .gap_3()
-            .child(
-                ui::icon_button("header-back", "back", cx).on_click(cx.listener(
-                    |this, _, _, cx| {
-                        if this.browse.as_ref().is_some_and(|view| view.is_detail) {
-                            this.home_playlist_open = false;
-                            this.library_album_open = false;
-                            this.overview_detail_open = false;
-                            let _ = this.service.commands.send(Command::BrowseBack);
-                            let _ = this.service.commands.send(Command::LoadDetails);
-                        } else {
-                            this.navigate(Page::Home, cx);
-                        }
-                    },
-                )),
-            )
+            .when(self.can_go_back(), |header| {
+                header.child(
+                    ui::icon_button_labeled("header-back", "back", "返回上一级", cx)
+                        .on_click(cx.listener(|this, _, _, cx| this.go_back(cx))),
+                )
+            })
             .child(
                 div()
                     .relative()
@@ -57,7 +48,7 @@ impl MusicApp {
                         search.child(gpui::deferred(self.render_search_assist(cx)).with_priority(1))
                     })
                     .child(ui::icon("search", rgb(0x788196)))
-                    .child(div().flex_1().min_w_0().child(self.input.clone()))
+                    .child(div().flex_1().min_w_0().child(self.search.input.clone()))
                     .child(
                         div()
                             .text_size(px(10.))
@@ -80,11 +71,11 @@ impl MusicApp {
                         if hot_open {
                             this.dismiss_search_assist(cx);
                         } else {
-                            this.search_assist_dismissed = false;
-                            this.show_hot_words = true;
-                            this.show_search_history = false;
-                            this.confirm_clear_search_history = false;
-                            if this.hot_words.is_none() {
+                            this.search.assist_dismissed = false;
+                            this.search.show_hot_words = true;
+                            this.search.show_history = false;
+                            this.search.confirm_clear_history = false;
+                            if this.search.hot_words.is_none() {
                                 this.load_hot_words(cx);
                             }
                             cx.notify();
@@ -102,9 +93,9 @@ impl MusicApp {
                         if history_open {
                             this.dismiss_search_assist(cx);
                         } else {
-                            this.search_assist_dismissed = false;
-                            this.show_search_history = true;
-                            this.show_hot_words = false;
+                            this.search.assist_dismissed = false;
+                            this.search.show_history = true;
+                            this.search.show_hot_words = false;
                             this.request_search_history(Command::LoadSearchHistory, cx);
                             cx.notify();
                         }
@@ -141,7 +132,7 @@ impl MusicApp {
                                 this.close_account_menu(cx);
                             } else {
                                 this.show_account = true;
-                                this.player_tools_open = false;
+                                this.panels.player_tools_open = false;
                                 let _ = this.service.commands.send(Command::RefreshAccounts);
                                 cx.notify();
                             }
@@ -272,13 +263,10 @@ impl MusicApp {
                         .gap_3()
                         .child("使用波点 App 扫描二维码")
                         .child(
-                            div()
-                                .id("qr-refresh")
-                                .px_3()
-                                .py_2()
-                                .rounded_md()
-                                .bg(rgb(0xe9edf5))
-                                .child("刷新二维码")
+                            ui::icon_button_labeled("qr-refresh", "refresh", "刷新二维码", cx)
+                                .when(self.auth.busy, |button| {
+                                    button.opacity(0.45).cursor_default()
+                                })
                                 .when(!self.auth.busy, |button| {
                                     button.cursor_pointer().on_click(cx.listener(
                                         |this, _, _, _| {

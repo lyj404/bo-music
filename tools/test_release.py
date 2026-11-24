@@ -24,9 +24,14 @@ class ReleaseTests(unittest.TestCase):
             archive = root / "bo_music_1.2.3-beta.1_linux_x64.tar.gz"
             archive.write_bytes(b"release archive content")
             release.aur(argparse.Namespace(version="1.2.3-beta.1", repository="owner/renamed", directory=root))
-            package = (root / "aur/bo_music-bin/PKGBUILD").read_text()
-            srcinfo = (root / "aur/bo_music-bin/.SRCINFO").read_text()
+            package = (root / "aur/bo_music/PKGBUILD").read_text()
+            srcinfo = (root / "aur/bo_music/.SRCINFO").read_text()
             expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+            self.assertIn("pkgname=bo_music\n", package)
+            self.assertIn("pkgbase = bo_music\n", srcinfo)
+            self.assertIn("pkgname = bo_music\n", srcinfo)
+            self.assertNotIn("conflicts=", package)
+            self.assertNotIn("\tconflicts =", srcinfo)
             self.assertIn("pkgver=1.2.3beta.1", package)
             self.assertIn("/owner/renamed/releases/download/v1.2.3-beta.1/", package)
             self.assertIn(expected, package)
@@ -34,7 +39,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertNotIn("SKIP", package)
             self.assertNotIn("aarch64", srcinfo)
             with tarfile.open(root / "bo_music_1.2.3-beta.1_aur.tar.gz") as source:
-                self.assertIn("bo_music-bin/.SRCINFO", source.getnames())
+                self.assertEqual(set(source.getnames()), {"bo_music", "bo_music/PKGBUILD", "bo_music/.SRCINFO"})
 
     def test_release_requires_every_asset_and_hashes_the_final_files(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -48,7 +53,10 @@ class ReleaseTests(unittest.TestCase):
             for line in (root / "SHA256SUMS").read_text().splitlines():
                 digest, name = line.split("  ", 1)
                 self.assertEqual(digest, hashlib.sha256((root / name).read_bytes()).hexdigest())
-            self.assertIn("简体中文", (root / "release-notes.md").read_text())
+            notes = (root / "release-notes.md").read_text()
+            self.assertIn("简体中文", notes)
+            self.assertIn("yay -S bo_music`", notes)
+            self.assertNotIn("bo_music-bin", notes)
 
 
 if __name__ == "__main__":

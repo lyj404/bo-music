@@ -349,7 +349,7 @@ impl MusicApp {
                                         )
                                     })
                                     .when(
-                                        editable_playlist.is_some() && !self.playlist_busy,
+                                        editable_playlist.is_some() && !self.playlist_editor.busy,
                                         |row| {
                                             let playlist_id =
                                                 editable_playlist.expect("playlist checked");

@@ -457,7 +457,7 @@ impl MusicApp {
                                         row.child(format!("{count} 次"))
                                     })
                                     .on_click(cx.listener(move |this, _, _, _| {
-                                        if this.page == Page::AccountOverview
+                                        if this.navigation.page == Page::AccountOverview
                                             && this.month_page.generation == generation
                                             && this.month_page.period == Some(period)
                                         {

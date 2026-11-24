@@ -32,7 +32,7 @@ impl MusicApp {
                             .bg(rgb(if selected { 0xe9edf5 } else { 0xffffff }))
                             .child(tag.name.clone())
                             .on_click(cx.listener(move |this, _, _, _| {
-                                if this.page == Page::PlaylistSquare {
+                                if this.navigation.page == Page::PlaylistSquare {
                                     let _ = this
                                         .service
                                         .commands
@@ -59,24 +59,24 @@ impl MusicApp {
     }
 
     pub(super) fn close_comments(&mut self, cx: &mut Context<Self>) {
-        if self.show_comments {
-            self.show_comments = false;
-            self.comment_image.clear(cx);
+        if self.panels.show_comments {
+            self.panels.show_comments = false;
+            self.comment_panel.image.clear(cx);
             let _ = self.service.commands.send(Command::CloseComments);
         }
     }
 
     pub(super) fn clear_playlist_cover(&mut self, cx: &mut Context<Self>) {
-        self.playlist_editor_generation = self.playlist_editor_generation.wrapping_add(1);
-        if let Some(preview) = self.playlist_cover_preview.take() {
+        self.playlist_editor.generation = self.playlist_editor.generation.wrapping_add(1);
+        if let Some(preview) = self.playlist_editor.cover_preview.take() {
             preview.remove_asset(cx);
         }
-        self.playlist_cover_path = None;
-        self.playlist_cover_image = None;
-        self.playlist_cover_crop = CoverCrop::default();
-        self.playlist_cover_loading = false;
-        self.playlist_cover_request = self.playlist_cover_request.wrapping_add(1);
-        self.playlist_cover_drag = None;
+        self.playlist_editor.cover_path = None;
+        self.playlist_editor.cover_image = None;
+        self.playlist_editor.cover_crop = CoverCrop::default();
+        self.playlist_editor.cover_loading = false;
+        self.playlist_editor.cover_request = self.playlist_editor.cover_request.wrapping_add(1);
+        self.playlist_editor.cover_drag = None;
     }
 
     pub(super) fn cover(
@@ -146,14 +146,16 @@ impl MusicApp {
 
     pub(super) fn playlist_cover_cropper(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
-        let (Some(cover), Some(preview)) =
-            (&self.playlist_cover_image, &self.playlist_cover_preview)
-        else {
+        let (Some(cover), Some(preview)) = (
+            &self.playlist_editor.cover_image,
+            &self.playlist_editor.cover_preview,
+        ) else {
             return div().into_any_element();
         };
         const VIEWPORT: f32 = 200.0;
         let (left, top, side) = self
-            .playlist_cover_crop
+            .playlist_editor
+            .cover_crop
             .source_rect(cover.width, cover.height);
         if side == 0 {
             return div().into_any_element();
@@ -184,38 +186,38 @@ impl MusicApp {
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, event: &gpui::MouseDownEvent, _, _| {
-                            if !this.playlist_busy {
-                                this.playlist_cover_drag = Some(event.position);
+                            if !this.playlist_editor.busy {
+                                this.playlist_editor.cover_drag = Some(event.position);
                             }
                         }),
                     )
                     .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
-                        if let Some(last) = this.playlist_cover_drag
-                            && let Some(image) = &this.playlist_cover_image
+                        if let Some(last) = this.playlist_editor.cover_drag
+                            && let Some(image) = &this.playlist_editor.cover_image
                         {
                             let dx = f32::from(event.position.x - last.x);
                             let dy = f32::from(event.position.y - last.y);
-                            this.playlist_cover_crop.pan(
+                            this.playlist_editor.cover_crop.pan(
                                 image.width,
                                 image.height,
                                 dx,
                                 dy,
                                 VIEWPORT,
                             );
-                            this.playlist_cover_drag = Some(event.position);
+                            this.playlist_editor.cover_drag = Some(event.position);
                             cx.notify();
                         }
                     }))
                     .on_mouse_up(
                         MouseButton::Left,
                         cx.listener(|this, _, _, _| {
-                            this.playlist_cover_drag = None;
+                            this.playlist_editor.cover_drag = None;
                         }),
                     )
                     .on_mouse_up_out(
                         MouseButton::Left,
                         cx.listener(|this, _, _, _| {
-                            this.playlist_cover_drag = None;
+                            this.playlist_editor.cover_drag = None;
                         }),
                     ),
             )
@@ -227,7 +229,7 @@ impl MusicApp {
                     .child("拖动图片调整裁剪区域")
                     .child(format!(
                         "缩放：{:.0}%",
-                        self.playlist_cover_crop.zoom * 100.0
+                        self.playlist_editor.cover_crop.zoom * 100.0
                     ))
                     .child(
                         div().flex().gap_3().children(
@@ -241,8 +243,8 @@ impl MusicApp {
                                         .text_color(rgb(0x415de5))
                                         .child(label)
                                         .on_click(cx.listener(move |this, _, _, cx| {
-                                            if !this.playlist_busy {
-                                                this.playlist_cover_crop.change_zoom(delta);
+                                            if !this.playlist_editor.busy {
+                                                this.playlist_editor.cover_crop.change_zoom(delta);
                                                 cx.notify();
                                             }
                                         }))
@@ -257,8 +259,8 @@ impl MusicApp {
                             .text_color(rgb(0x415de5))
                             .child("重置裁剪")
                             .on_click(cx.listener(|this, _, _, cx| {
-                                if !this.playlist_busy {
-                                    this.playlist_cover_crop = CoverCrop::default();
+                                if !this.playlist_editor.busy {
+                                    this.playlist_editor.cover_crop = CoverCrop::default();
                                     cx.notify();
                                 }
                             })),

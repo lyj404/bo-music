@@ -294,17 +294,23 @@ impl MusicApp {
                                 (item.error || matches!(item.module.kind, 3 | 10)) && !view.loading,
                                 |row| {
                                     row.child(
-                                        div()
-                                            .id(("home-refresh-module", item_index))
-                                            .cursor_pointer()
-                                            .text_sm()
-                                            .text_color(rgb(0x415de5))
-                                            .child(if item.error { "重试" } else { "换一批" })
-                                            .on_click(cx.listener(move |this, _, _, _| {
+                                        ui::icon_button_labeled(
+                                            ("home-refresh-module", item_index),
+                                            "refresh",
+                                            if item.error {
+                                                "重新加载"
+                                            } else {
+                                                "换一批"
+                                            },
+                                            cx,
+                                        )
+                                        .on_click(
+                                            cx.listener(move |this, _, _, _| {
                                                 let _ = this.service.commands.send(
                                                     Command::HomeRefresh(item_index, generation),
                                                 );
-                                            })),
+                                            }),
+                                        ),
                                     )
                                 },
                             )
@@ -385,15 +391,11 @@ impl MusicApp {
             )
             .when(view.has_more && !view.loading, |body| {
                 body.child(
-                    div()
-                        .id("home-next")
-                        .p_3()
-                        .cursor_pointer()
-                        .text_color(rgb(0x415de5))
-                        .child("加载更多")
-                        .on_click(cx.listener(|this, _, _, _| {
+                    ui::icon_button_labeled("home-next", "refresh", "加载更多", cx).on_click(
+                        cx.listener(|this, _, _, _| {
                             let _ = this.service.commands.send(Command::HomeNext);
-                        })),
+                        }),
+                    ),
                 )
             })
             .into_any_element()
@@ -462,7 +464,7 @@ impl MusicApp {
                         div().mt_3().flex().child(
                             ui::primary_icon_button(
                                 "home-hero-play",
-                                if first.is_some() { "play" } else { "clock" },
+                                if first.is_some() { "play" } else { "refresh" },
                                 if first.is_some() {
                                     "播放今日精选"
                                 } else if self.home.as_ref().is_none_or(|view| view.loading) {
@@ -701,22 +703,24 @@ impl MusicApp {
                         )
                         .when(!view.loading && view.has_more, |body| {
                             body.child(
-                                div()
-                                    .id("library-next")
-                                    .p_3()
-                                    .cursor_pointer()
-                                    .text_color(rgb(0x415de5))
-                                    .child(if view.error.is_some() {
-                                        "重试"
+                                ui::icon_button_labeled(
+                                    "library-next",
+                                    "refresh",
+                                    if view.error.is_some() {
+                                        "重试加载"
                                     } else {
                                         "加载更多"
-                                    })
-                                    .on_click(cx.listener(move |this, _, _, _| {
+                                    },
+                                    cx,
+                                )
+                                .on_click(cx.listener(
+                                    move |this, _, _, _| {
                                         let _ = this
                                             .service
                                             .commands
                                             .send(Command::LibraryNext(generation));
-                                    })),
+                                    },
+                                )),
                             )
                         }),
                 )
@@ -768,6 +772,7 @@ impl MusicApp {
             .child(
                 div()
                     .flex()
+                    .items_center()
                     .gap_3()
                     .pb_3()
                     .child(
@@ -777,11 +782,7 @@ impl MusicApp {
                             .child("探索乐库"),
                     )
                     .child(
-                        div()
-                            .id("library-reload")
-                            .cursor_pointer()
-                            .text_color(rgb(0x415de5))
-                            .child("重新加载")
+                        ui::icon_button_labeled("library-reload", "refresh", "重新加载", cx)
                             .on_click(cx.listener(|this, _, _, _| {
                                 let _ = this.service.commands.send(Command::LoadLibrary);
                             })),

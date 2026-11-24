@@ -30,6 +30,7 @@ mod shell_playlist_form;
 mod shell_quality;
 mod shell_queue;
 mod shell_render;
+mod shell_state;
 mod shortcut_page;
 mod ui;
 #[cfg(windows)]
@@ -40,7 +41,6 @@ mod windows_tray;
 use artwork_cache::ArtworkCache;
 use bo_music_app::batch_playlist::BatchProgress;
 use bo_music_app::browse::{BrowseContent, BrowseView, CollectionState, DetailView, SearchKind};
-use bo_music_app::comments::CommentsView;
 use bo_music_app::desktop_service::{
     AccountEntry, AudioEffectAction, AuthView, BatchSource, Command, Event, LyricsView, PlayerView,
     PlaylistMutationResult, PlaylistPickerView, QrView, SearchSection, Service,
@@ -49,22 +49,24 @@ use bo_music_app::home::HomeView;
 use bo_music_app::library::{LibrarySort, LibraryView};
 use bo_music_app::likes::{LikeState, LikeView};
 use bo_music_app::playback::QueueEdit;
-use bo_music_app::playlist_cover::{CoverCrop, CoverEdit, CoverImage};
-use bo_music_domain::catalog::{CategoryGroup, PlaylistCategory};
+use bo_music_app::playlist_cover::{CoverCrop, CoverEdit};
 use bo_music_domain::comments::CommentSort;
 use bo_music_domain::discovery::HomeContent;
 use bo_music_domain::track::Track;
 use bo_music_playback::mpv::PlaybackState;
 use gpui::{
     App, Application, Bounds, ClipboardItem, Context, Entity, Focusable, Image, ImageFormat,
-    KeyBinding, MouseButton, PathPromptOptions, Pixels, Point, ScrollHandle, Window, WindowBounds,
-    WindowOptions, actions, canvas, div, prelude::*, px, size,
+    KeyBinding, MouseButton, PathPromptOptions, ScrollHandle, Window, WindowBounds, WindowOptions,
+    actions, canvas, div, prelude::*, px, size,
 };
 use input::TextInput;
+use shell_state::{
+    CommentPanelState, NavigationState, Page, PanelState, PlaylistDialog, PlaylistEditorState,
+    SearchState, comment_draft_key,
+};
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
-    path::PathBuf,
+    collections::HashSet,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -79,104 +81,30 @@ enum QrDisplay {
     Failed,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Page {
-    Home,
-    Library,
-    Overview,
-    Tracks,
-    PlaylistSearch,
-    PlaylistSquare,
-    AlbumSearch,
-    ArtistSearch,
-    Mine,
-    Collection,
-    Charts,
-    Recent,
-    AccountOverview,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum PlaylistDialog {
-    Closed,
-    Create,
-    EditLoading(i64),
-    Edit(i64),
-    Delete(i64),
-}
-
-type CommentDraftKey = (u64, i64, i64, i64);
-
-fn comment_draft_key(view: &CommentsView) -> Option<CommentDraftKey> {
-    Some((
-        view.account_revision?,
-        view.track_id?,
-        view.root.as_ref().map_or(0, |root| root.id),
-        view.reply_target.as_ref().map_or(0, |target| target.0),
-    ))
-}
-
 struct MusicApp {
+    panels: PanelState,
+    comment_panel: CommentPanelState,
+    playlist_editor: PlaylistEditorState,
+    search: SearchState,
+    navigation: NavigationState,
     appearance_page: appearance::AppearancePage,
     shortcuts: shortcut_page::ShortcutPage,
     playback_focus: gpui::FocusHandle,
-    comment_image: comment_image::CommentImage,
     account_overview_generation: u64,
     account_overview: Option<Box<Result<bo_music_domain::account::AccountOverview, ()>>>,
     month_page: month_page::MonthPage,
     mv_page: mv_page::MvPage,
-    overview_generation: u64,
-    overview_query: String,
-    overview_result: Option<Result<Vec<SearchSection>, ()>>,
-    overview_detail_open: bool,
     artwork: RefCell<ArtworkCache>,
     home: Option<HomeView>,
-    home_playlist_open: bool,
     library: Option<LibraryView>,
-    library_album_open: bool,
-    input: Entity<TextInput>,
-    suggestion_query: Option<String>,
-    suggestion_generation: u64,
-    search_suggestions: Vec<String>,
-    search_assist_dismissed: bool,
-    show_hot_words: bool,
-    show_search_history: bool,
-    search_history: Option<Result<Vec<String>, String>>,
-    confirm_clear_search_history: bool,
-    hot_words: Option<Vec<String>>,
-    hot_words_loading: bool,
     phone_input: Entity<TextInput>,
     code_input: Entity<TextInput>,
     preset_name_input: Entity<TextInput>,
     preset_description_input: Entity<TextInput>,
-    playlist_name_input: Entity<TextInput>,
-    playlist_description_input: Entity<TextInput>,
-    comment_input: Entity<TextInput>,
-    comments: Option<CommentsView>,
-    comment_drafts: HashMap<CommentDraftKey, String>,
-    submitted_comment: Option<(u64, CommentDraftKey, String)>,
-    comment_anonymous: bool,
-    playlist_dialog: PlaylistDialog,
-    playlist_modal_focus: gpui::FocusHandle,
-    playlist_private: bool,
-    playlist_busy: bool,
-    playlist_category_groups: Option<Vec<CategoryGroup>>,
-    playlist_original_categories: Vec<PlaylistCategory>,
-    playlist_selected_categories: Vec<i32>,
-    playlist_cover_path: Option<PathBuf>,
-    playlist_cover_image: Option<Arc<CoverImage>>,
-    playlist_cover_preview: Option<Arc<Image>>,
-    playlist_cover_crop: CoverCrop,
-    playlist_cover_loading: bool,
-    playlist_cover_request: u64,
-    playlist_cover_drag: Option<Point<Pixels>>,
-    playlist_editor_generation: u64,
     track_picker: Option<PlaylistPickerView>,
     row_actions: Option<(BatchSource, usize, i64)>,
-    browse_description_open: bool,
     batch_selection: HashSet<(usize, i64)>,
     batch_generation: Option<BatchSource>,
-    search_generation: u64,
     history_generation: u64,
     batch_remove_confirm: bool,
     batch_progress: Option<BatchProgress>,
@@ -189,12 +117,9 @@ struct MusicApp {
     legacy_floating_windows: bo_music_app::desktop_service::LegacyFloatingWindows,
     #[cfg(windows)]
     desktop_lyrics_locked: bool,
-    tracks: Vec<Track>,
     recent_tracks: Vec<Track>,
     recent_loading: bool,
     recent_error: Option<String>,
-    has_more: bool,
-    search_loading: bool,
     status: String,
     player: Option<PlayerView>,
     #[cfg(windows)]
@@ -205,12 +130,6 @@ struct MusicApp {
     linux_tray_available: std::rc::Rc<std::cell::Cell<bool>>,
     like: LikeView,
     lyrics: LyricsView,
-    player_tools_open: bool,
-    side_panel_open: bool,
-    show_lyrics: bool,
-    show_effects: bool,
-    show_quality: bool,
-    show_comments: bool,
     lyric_scroll: ScrollHandle,
     lyric_page: lyric_page::LyricPage,
     lyric_poster: lyric_poster::PosterPage,
@@ -224,9 +143,6 @@ struct MusicApp {
     show_account: bool,
     show_qr: bool,
     qr: QrDisplay,
-    page: Page,
-    collection_kind: SearchKind,
-    browse: Option<BrowseView>,
 }
 
 impl MusicApp {
@@ -266,68 +182,35 @@ impl MusicApp {
         })
         .detach();
         Self {
+            panels: PanelState::default(),
+            comment_panel: CommentPanelState::new(comment_input),
+            playlist_editor: PlaylistEditorState::new(
+                playlist_name_input,
+                playlist_description_input,
+                cx.focus_handle(),
+            ),
+            search: SearchState::new(input),
+            navigation: NavigationState::default(),
             appearance_page: appearance::AppearancePage::new(cx),
             shortcuts: shortcut_page::ShortcutPage::new(cx),
             playback_focus: cx.focus_handle(),
             #[cfg(windows)]
             legacy_floating_windows: Default::default(),
-            comment_image: comment_image::CommentImage::default(),
             account_overview_generation: 0,
             account_overview: None,
             month_page: month_page::MonthPage::default(),
             mv_page: mv_page::MvPage::new(cx),
-            overview_generation: 0,
-            overview_query: String::new(),
-            overview_result: None,
-            overview_detail_open: false,
             artwork: RefCell::new(ArtworkCache::default()),
             home: None,
-            home_playlist_open: false,
             library: None,
-            library_album_open: false,
-            input,
-            suggestion_query: Some(String::new()),
-            suggestion_generation: 0,
-            search_suggestions: Vec::new(),
-            search_assist_dismissed: false,
-            show_hot_words: false,
-            show_search_history: false,
-            search_history: None,
-            confirm_clear_search_history: false,
-            hot_words: None,
-            hot_words_loading: false,
             phone_input,
             code_input,
             preset_name_input,
             preset_description_input,
-            playlist_name_input,
-            playlist_description_input,
-            comment_input,
-            comments: None,
-            comment_drafts: HashMap::new(),
-            submitted_comment: None,
-            comment_anonymous: false,
-            playlist_dialog: PlaylistDialog::Closed,
-            playlist_modal_focus: cx.focus_handle(),
-            playlist_private: false,
-            playlist_busy: false,
-            playlist_category_groups: None,
-            playlist_original_categories: Vec::new(),
-            playlist_selected_categories: Vec::new(),
-            playlist_cover_path: None,
-            playlist_cover_image: None,
-            playlist_cover_preview: None,
-            playlist_cover_crop: CoverCrop::default(),
-            playlist_cover_loading: false,
-            playlist_cover_request: 0,
-            playlist_cover_drag: None,
-            playlist_editor_generation: 0,
             track_picker: None,
             row_actions: None,
-            browse_description_open: false,
             batch_selection: HashSet::new(),
             batch_generation: None,
-            search_generation: 0,
             history_generation: 0,
             batch_remove_confirm: false,
             batch_progress: None,
@@ -344,22 +227,13 @@ impl MusicApp {
             floating_windows: Default::default(),
             #[cfg(windows)]
             desktop_lyrics_locked: false,
-            tracks: Vec::new(),
             recent_tracks: Vec::new(),
             recent_loading: false,
             recent_error: None,
-            has_more: false,
-            search_loading: false,
             status: "正在启动…".into(),
             player: None,
             like: LikeView::default(),
             lyrics: LyricsView::Empty,
-            player_tools_open: false,
-            side_panel_open: false,
-            show_lyrics: true,
-            show_effects: false,
-            show_quality: false,
-            show_comments: false,
             lyric_scroll: ScrollHandle::new(),
             lyric_page: lyric_page::LyricPage::new(cx),
             lyric_poster: lyric_poster::PosterPage::new(cx),
@@ -377,9 +251,6 @@ impl MusicApp {
             show_account: false,
             show_qr: false,
             qr: QrDisplay::Idle,
-            page: Page::Home,
-            collection_kind: SearchKind::Playlist,
-            browse: None,
         }
     }
 
@@ -415,9 +286,9 @@ impl MusicApp {
         }
         if current != self.lyric_line || resumed {
             self.lyric_line = current;
-            if self.show_lyrics
-                && !self.show_effects
-                && !self.show_quality
+            if self.panels.show_lyrics
+                && !self.panels.show_effects
+                && !self.panels.show_quality
                 && self
                     .manual_scroll_until
                     .is_none_or(|until| Instant::now() >= until)
@@ -504,7 +375,7 @@ fn main() {
                 .expect("failed to open main window");
             window
                 .update(cx, |view, window, cx| {
-                    window.focus(&view.input.focus_handle(cx));
+                    window.focus(&view.search.input.focus_handle(cx));
                     floating_windows::observe_main_placement(window, cx);
                     appearance::observe(window, cx);
                     #[cfg(windows)]

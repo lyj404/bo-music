@@ -141,7 +141,7 @@ impl MusicApp {
                 if window.is_fullscreen() != fullscreen {
                     window.toggle_fullscreen();
                 }
-                window.focus(&self.input.read(cx).focus_handle(cx));
+                window.focus(&self.search.input.read(cx).focus_handle(cx));
             }
             return None;
         };
@@ -308,13 +308,21 @@ impl MusicApp {
                                     row.child(div().text_sm().child(message.unwrap_or_default()))
                                 })
                                 .when(view.error.is_some() || status.failure.is_some(), |row| {
-                                    row.child(button("mv-retry", "重新加载").on_click(cx.listener(
-                                        move |this, _, _, _| {
-                                            let _ = this.service.commands.send(Command::ControlMv(
-                                                MvAction::Quality(current_quality),
-                                            ));
-                                        },
-                                    )))
+                                    row.child(
+                                        crate::ui::icon_button_on_dark(
+                                            "mv-retry",
+                                            "refresh",
+                                            "重新加载",
+                                        )
+                                        .on_click(
+                                            cx.listener(move |this, _, _, _| {
+                                                let _ =
+                                                    this.service.commands.send(Command::ControlMv(
+                                                        MvAction::Quality(current_quality),
+                                                    ));
+                                            }),
+                                        ),
+                                    )
                                 })
                                 .children(
                                     [

@@ -108,7 +108,7 @@ jobs:
           sudo apt-get remove -y bo-music
       - name: Verify AUR metadata with makepkg
         run: |
-          docker run --rm -v "$PWD/target/dist/aur/bo_music-bin:/pkg" archlinux:base-devel bash -c '
+          docker run --rm -v "$PWD/target/dist/aur/bo_music:/pkg" archlinux:base-devel bash -c '
             useradd -m builder
             cd /pkg
             chmod a+w .
@@ -183,7 +183,7 @@ jobs:
         with:
           name: linux-x64
           path: target/dist
-      - name: Publish bo_music-bin to AUR
+      - name: Publish bo_music to AUR
         if: steps.configured.outputs.ready == 'true'
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}

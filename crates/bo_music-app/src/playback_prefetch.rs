@@ -59,13 +59,13 @@ impl Prefetcher {
             self.entry = None;
         }
     }
-    pub(super) fn prune(&mut self) {
+    pub(super) fn prune_at(&mut self, now: Instant) {
         self.cache
-            .retain(|entry| entry.started.elapsed() <= PREFETCH_TTL);
+            .retain(|entry| now.saturating_duration_since(entry.started) <= PREFETCH_TTL);
         if self
             .entry
             .as_ref()
-            .is_some_and(|entry| entry.started.elapsed() > PREFETCH_TTL)
+            .is_some_and(|entry| now.saturating_duration_since(entry.started) > PREFETCH_TTL)
         {
             self.entry = None;
         }
@@ -83,7 +83,7 @@ impl Prefetcher {
         }
         self.cache.push(item);
     }
-    fn harvest(&mut self) {
+    fn harvest(&mut self, now: Instant) {
         if !self
             .entry
             .as_ref()
@@ -101,7 +101,7 @@ impl Prefetcher {
                 return;
             }
         };
-        if entry.started.elapsed() <= PREFETCH_TTL {
+        if now.saturating_duration_since(entry.started) <= PREFETCH_TTL {
             self.insert(CachedEntry {
                 key: entry.key.clone(),
                 started: entry.started,
@@ -118,7 +118,7 @@ impl Prefetcher {
         }
     }
     pub(crate) fn forget_for(&mut self, ticket: &ResolutionTicket) {
-        self.harvest();
+        self.harvest(Instant::now());
         let key = ticket.key();
         self.cache.retain(|entry| entry.key != key);
         if self.entry.as_ref().is_some_and(|entry| entry.key == key) {
@@ -126,8 +126,9 @@ impl Prefetcher {
         }
     }
     pub(crate) fn reconcile(&mut self, candidate: Option<ResolutionTicket>) {
-        self.harvest();
-        self.prune();
+        let now = Instant::now();
+        self.harvest(now);
+        self.prune_at(now);
         let Some(candidate) = candidate else {
             self.entry = None;
             return;
@@ -137,11 +138,9 @@ impl Prefetcher {
             self.entry = None;
             return;
         }
-        if self
-            .entry
-            .as_ref()
-            .is_some_and(|entry| entry.key == key && entry.started.elapsed() <= PREFETCH_TTL)
-        {
+        if self.entry.as_ref().is_some_and(|entry| {
+            entry.key == key && now.saturating_duration_since(entry.started) <= PREFETCH_TTL
+        }) {
             return;
         }
         self.entry = None;
@@ -156,13 +155,20 @@ impl Prefetcher {
         }
         self.entry = Some(PrefetchEntry {
             key,
-            started: Instant::now(),
+            started: now,
             task: tokio::spawn(candidate.resolve()),
         });
     }
     pub(crate) fn take_for(&mut self, ticket: &ResolutionTicket) -> Option<PrefetchHit> {
-        self.harvest();
-        self.prune();
+        self.take_for_at(ticket, Instant::now())
+    }
+    pub(super) fn take_for_at(
+        &mut self,
+        ticket: &ResolutionTicket,
+        now: Instant,
+    ) -> Option<PrefetchHit> {
+        self.harvest(now);
+        self.prune_at(now);
         let key = ticket.key();
         if let Some(index) = self.cache.iter().position(|entry| entry.key == key) {
             self.entry = None;
@@ -175,11 +181,9 @@ impl Prefetcher {
             self.cache.remove(index);
             return None;
         }
-        if self
-            .entry
-            .as_ref()
-            .is_some_and(|entry| entry.key == key && entry.started.elapsed() <= PREFETCH_TTL)
-        {
+        if self.entry.as_ref().is_some_and(|entry| {
+            entry.key == key && now.saturating_duration_since(entry.started) <= PREFETCH_TTL
+        }) {
             self.entry.take().map(PrefetchHit::Pending)
         } else {
             self.entry = None;

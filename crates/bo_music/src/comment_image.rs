@@ -66,7 +66,7 @@ impl MusicApp {
         poster: bool,
         cx: &mut Context<Self>,
     ) {
-        let state = &mut self.comment_image;
+        let state = &mut self.comment_panel.image;
         state.clear(cx);
         state.request = state.request.wrapping_add(1);
         state.target = Some((generation, id, poster));
@@ -87,7 +87,7 @@ impl MusicApp {
     }
 
     pub(super) fn render_comment_image(&self, cx: &mut Context<Self>) -> AnyElement {
-        let state = &self.comment_image;
+        let state = &self.comment_panel.image;
         let rgb = crate::appearance::paint(cx);
         let body = div()
             .id("comment-image-view")
@@ -98,7 +98,7 @@ impl MusicApp {
             .child(
                 crate::ui::icon_button_labeled("comment-image-back", "back", "返回评论", cx)
                     .on_click(cx.listener(|this, _, _, cx| {
-                        this.comment_image.clear(cx);
+                        this.comment_panel.image.clear(cx);
                         cx.notify();
                     })),
             );
@@ -143,9 +143,9 @@ impl MusicApp {
                 .child(
                     button("comment-image-copy", "复制 PNG", rgb).on_click(cx.listener(
                         |this, _, _, cx| {
-                            if let Some(image) = &this.comment_image.image {
+                            if let Some(image) = &this.comment_panel.image.image {
                                 cx.write_to_clipboard(ClipboardItem::new_image(image));
-                                this.comment_image.message = Some("图片已复制");
+                                this.comment_panel.image.message = Some("图片已复制");
                                 cx.notify();
                             }
                         },
@@ -171,7 +171,7 @@ impl MusicApp {
     }
 
     fn save_comment_image(&mut self, cx: &mut Context<Self>) {
-        let state = &mut self.comment_image;
+        let state = &mut self.comment_panel.image;
         let Some((_, id, poster)) = state.target else {
             return;
         };
@@ -195,8 +195,8 @@ impl MusicApp {
         cx.spawn(async move |entity, cx| {
             let selection = picker.await;
             let _ = entity.update(cx, |this, cx| {
-                let state = &mut this.comment_image;
-                if state.request != request || !state.is_open() || !this.show_comments {
+                let state = &mut this.comment_panel.image;
+                if state.request != request || !state.is_open() || !this.panels.show_comments {
                     return;
                 }
                 if let Ok(Ok(Some(path))) = &selection {

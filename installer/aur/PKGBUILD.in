@@ -1,5 +1,5 @@
 # Maintainer: lyj404
-pkgname=bo_music-bin
+pkgname=bo_music
 pkgver=@PKGVER@
 pkgrel=1
 pkgdesc='A modern Fluent-style music player'
@@ -8,8 +8,6 @@ url='@URL@'
 license=('GPL-3.0-or-later')
 depends=('glibc' 'gcc-libs' 'libxcb' 'libxkbcommon' 'libxkbcommon-x11' 'libx11' 'fontconfig' 'vulkan-icd-loader' 'libsecret' 'mpv' 'dbus')
 optdepends=('libpulse: parec command for audio spectrum visualization')
-provides=('bo_music')
-conflicts=('bo_music')
 options=('!strip' '!debug')
 source_x86_64=('@SOURCE_URL@')
 sha256sums_x86_64=('@SHA256@')

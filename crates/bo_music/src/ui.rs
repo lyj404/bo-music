@@ -69,6 +69,7 @@ pub fn icon_button(id: impl Into<gpui::ElementId>, name: &str, cx: &App) -> Stat
         "add" => "新建",
         "collapse" => "收起",
         "translate" => "译文",
+        "refresh" => "刷新",
         _ => "操作",
     };
     icon_button_labeled(id, name, label, cx)
