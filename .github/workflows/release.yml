@@ -45,20 +45,20 @@ jobs:
           toolchain: 1.90.0
           targets: x86_64-pc-windows-msvc
       - name: Build Windows x64
-        run: cargo build --release --locked -p bo_music --target x86_64-pc-windows-msvc
+        run: cargo build --release --locked -p bo-music --target x86_64-pc-windows-msvc
       - name: Install Inno Setup compiler
         run: choco upgrade innosetup -y --no-progress
       - name: Package ZIP and Simplified Chinese setup
         shell: pwsh
-        run: ./tools/package-windows.ps1 -Version $env:RELEASE_VERSION -Binary target/x86_64-pc-windows-msvc/release/bo_music.exe
+        run: ./tools/package-windows.ps1 -Version $env:RELEASE_VERSION -Binary target/x86_64-pc-windows-msvc/release/bo-music.exe
       - name: Verify setup install and uninstall
         shell: pwsh
         run: |
-          $setup = Join-Path $env:GITHUB_WORKSPACE "target/dist/bo_music_${env:RELEASE_VERSION}_windows_x64_setup.exe"
+          $setup = Join-Path $env:GITHUB_WORKSPACE "target/dist/bo-music_${env:RELEASE_VERSION}_windows_x64_setup.exe"
           $installDir = Join-Path $env:RUNNER_TEMP 'bo_music-install-test'
           $process = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$installDir") -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "Installation failed: $($process.ExitCode)" }
-          foreach ($file in @('bo_music.exe', 'libmpv-2.dll', 'unins000.exe')) {
+          foreach ($file in @('bo-music.exe', 'libmpv-2.dll', 'unins000.exe')) {
             if (-not (Test-Path -LiteralPath (Join-Path $installDir $file))) { throw "Installed file missing: $file" }
           }
           $process = Start-Process -FilePath (Join-Path $installDir 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
@@ -90,25 +90,25 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libfontconfig1-dev libvulkan-dev libwayland-dev libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev dpkg-dev desktop-file-utils
       - name: Build Linux x64
-        run: cargo build --release --locked -p bo_music --target x86_64-unknown-linux-gnu
+        run: cargo build --release --locked -p bo-music --target x86_64-unknown-linux-gnu
       - name: Package tar.gz and DEB
-        run: sh tools/package-rust-linux.sh target/x86_64-unknown-linux-gnu/release/bo_music target/dist "$RELEASE_VERSION"
+        run: sh tools/package-rust-linux.sh target/x86_64-unknown-linux-gnu/release/bo-music target/dist "$RELEASE_VERSION"
       - name: Generate AUR package and checksums
         run: python tools/release.py aur --version "$RELEASE_VERSION" --repository "$GITHUB_REPOSITORY"
       - name: Verify Linux packages
         run: |
           desktop-file-validate installer/bo_music.desktop
-          dpkg-deb --info "target/dist/bo_music_${RELEASE_VERSION}_amd64.deb"
-          sudo apt-get install -y "./target/dist/bo_music_${RELEASE_VERSION}_amd64.deb"
-          test -x /usr/bin/bo_music
+          dpkg-deb --info "target/dist/bo-music_${RELEASE_VERSION}_amd64.deb"
+          sudo apt-get install -y "./target/dist/bo-music_${RELEASE_VERSION}_amd64.deb"
+          test -x /usr/bin/bo-music
           test -f /usr/share/applications/bo_music.desktop
-          ldd /usr/bin/bo_music | tee /tmp/bo_music-ldd.txt
+          ldd /usr/bin/bo-music | tee /tmp/bo_music-ldd.txt
           ! grep -q 'not found' /tmp/bo_music-ldd.txt
           python -c 'import ctypes; ctypes.CDLL("libmpv.so.2")'
           sudo apt-get remove -y bo-music
       - name: Verify AUR metadata with makepkg
         run: |
-          docker run --rm -v "$PWD/target/dist/aur/bo_music:/pkg" archlinux:base-devel bash -c '
+          docker run --rm -v "$PWD/target/dist/aur/bo-music:/pkg" archlinux:base-devel bash -c '
             useradd -m builder
             cd /pkg
             chmod a+w .
@@ -157,7 +157,7 @@ jobs:
             gh release upload "$RELEASE_TAG" --clobber "${assets[@]}"
             exit 0
           fi
-          gh release create "$RELEASE_TAG" --verify-tag --title "bo_music $RELEASE_VERSION" --generate-notes --notes-file target/dist/release-notes.md "${flags[@]}" \
+          gh release create "$RELEASE_TAG" --verify-tag --title "bo-music $RELEASE_VERSION" --generate-notes --notes-file target/dist/release-notes.md "${flags[@]}" \
             "${assets[@]}"
 
   publish-aur:
@@ -183,11 +183,11 @@ jobs:
         with:
           name: linux-x64
           path: target/dist
-      - name: Publish bo_music to AUR
+      - name: Publish bo-music to AUR
         if: steps.configured.outputs.ready == 'true'
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
           AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-        run: bash tools/publish-aur.sh "target/dist/bo_music_${RELEASE_VERSION}_aur.tar.gz" "$RELEASE_VERSION"
+        run: bash tools/publish-aur.sh "target/dist/bo-music_${RELEASE_VERSION}_aur.tar.gz" "$RELEASE_VERSION"

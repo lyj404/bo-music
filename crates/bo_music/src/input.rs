@@ -634,7 +634,9 @@ impl Element for TextElement {
 }
 
 impl Render for TextInput {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let colors = crate::appearance::palette(cx);
+        let focused = self.focus_handle.is_focused(window);
         div()
             .flex()
             .key_context("TextInput")
@@ -657,9 +659,15 @@ impl Render for TextInput {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
-            .bg(crate::appearance::paint(cx)(0xeeeeee))
+            .bg(colors.elevated)
             .text_color(crate::appearance::paint(cx)(0x20293a))
             .rounded_md()
+            .border_b_2()
+            .border_color(if focused {
+                colors.accent
+            } else {
+                colors.border
+            })
             .overflow_hidden()
             .line_height(px(22.))
             .text_size(px(14.))
@@ -669,7 +677,7 @@ impl Render for TextInput {
                     .w_full()
                     .px_3()
                     .py_2()
-                    .bg(crate::appearance::paint(cx)(0xf5f7fb))
+                    .bg(colors.elevated)
                     .child(TextElement { input: cx.entity() }),
             )
     }

@@ -58,6 +58,7 @@ impl MusicApp {
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
+        let palette = appearance::palette(cx);
         let mut nav = div()
             .id("main-navigation")
             .w(px(if compact { 174. } else { 204. }))
@@ -80,7 +81,7 @@ impl MusicApp {
                         div()
                             .text_lg()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("bo_music"),
+                            .child("bo-music"),
                     ),
             );
         for (index, (page, icon, label)) in [
@@ -113,11 +114,11 @@ impl MusicApp {
                     .gap_3()
                     .rounded_md()
                     .cursor_pointer()
-                    .text_color(rgb(0x687083))
-                    .hover(|item| item.bg(rgb(0xe9edf5)))
+                    .text_color(palette.muted)
+                    .hover(|item| item.bg(palette.hover))
                     .when(active, |item| {
-                        item.bg(rgb(0xffffff))
-                            .text_color(rgb(0x20293a))
+                        item.bg(palette.elevated)
+                            .text_color(palette.text)
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .child(
                                 div()
@@ -126,7 +127,7 @@ impl MusicApp {
                                     .w(px(3.))
                                     .h(px(17.))
                                     .rounded_full()
-                                    .bg(rgb(0x415de5)),
+                                    .bg(palette.accent),
                             )
                     })
                     .child(ui::icon(

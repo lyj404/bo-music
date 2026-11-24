@@ -21,25 +21,26 @@ class ReleaseTests(unittest.TestCase):
     def test_prerelease_aur_uses_original_tag_and_archive_checksum(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            archive = root / "bo_music_1.2.3-beta.1_linux_x64.tar.gz"
+            archive = root / "bo-music_1.2.3-beta.1_linux_x64.tar.gz"
             archive.write_bytes(b"release archive content")
             release.aur(argparse.Namespace(version="1.2.3-beta.1", repository="owner/renamed", directory=root))
-            package = (root / "aur/bo_music/PKGBUILD").read_text()
-            srcinfo = (root / "aur/bo_music/.SRCINFO").read_text()
+            package = (root / "aur/bo-music/PKGBUILD").read_text()
+            srcinfo = (root / "aur/bo-music/.SRCINFO").read_text()
             expected = hashlib.sha256(archive.read_bytes()).hexdigest()
-            self.assertIn("pkgname=bo_music\n", package)
-            self.assertIn("pkgbase = bo_music\n", srcinfo)
-            self.assertIn("pkgname = bo_music\n", srcinfo)
-            self.assertNotIn("conflicts=", package)
-            self.assertNotIn("\tconflicts =", srcinfo)
+            self.assertIn("pkgname=bo-music\n", package)
+            self.assertIn("pkgbase = bo-music\n", srcinfo)
+            self.assertIn("pkgname = bo-music\n", srcinfo)
+            self.assertIn("conflicts=('bo_music')", package)
+            self.assertIn("\tconflicts = bo_music", srcinfo)
+            self.assertIn("\treplaces = bo_music", srcinfo)
             self.assertIn("pkgver=1.2.3beta.1", package)
             self.assertIn("/owner/renamed/releases/download/v1.2.3-beta.1/", package)
             self.assertIn(expected, package)
             self.assertIn(expected, srcinfo)
             self.assertNotIn("SKIP", package)
             self.assertNotIn("aarch64", srcinfo)
-            with tarfile.open(root / "bo_music_1.2.3-beta.1_aur.tar.gz") as source:
-                self.assertEqual(set(source.getnames()), {"bo_music", "bo_music/PKGBUILD", "bo_music/.SRCINFO"})
+            with tarfile.open(root / "bo-music_1.2.3-beta.1_aur.tar.gz") as source:
+                self.assertEqual(set(source.getnames()), {"bo-music", "bo-music/PKGBUILD", "bo-music/.SRCINFO"})
 
     def test_release_requires_every_asset_and_hashes_the_final_files(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -48,14 +49,14 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Missing release asset"):
                 release.notes(args)
             for suffix in ("windows_x64.zip", "windows_x64_setup.exe", "linux_x64.tar.gz", "amd64.deb", "aur.tar.gz"):
-                (root / f"bo_music_1.2.3_{suffix}").write_bytes(suffix.encode())
+                (root / f"bo-music_1.2.3_{suffix}").write_bytes(suffix.encode())
             release.notes(args)
             for line in (root / "SHA256SUMS").read_text().splitlines():
                 digest, name = line.split("  ", 1)
                 self.assertEqual(digest, hashlib.sha256((root / name).read_bytes()).hexdigest())
             notes = (root / "release-notes.md").read_text()
             self.assertIn("简体中文", notes)
-            self.assertIn("yay -S bo_music`", notes)
+            self.assertIn("yay -S bo-music`", notes)
             self.assertNotIn("bo_music-bin", notes)
 
 

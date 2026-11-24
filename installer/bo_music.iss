@@ -13,16 +13,16 @@
 
 [Setup]
 AppId={{E17D463A-233B-482B-93C8-7BAC3C832E97}
-AppName=bo_music
+AppName=bo-music
 AppVersion={#APP_VERSION}
 VersionInfoVersion={#APP_VERSION_CORE}
-AppPublisher=bo_music
+AppPublisher=bo-music
 DefaultDirName={localappdata}\Programs\bo_music
-DefaultGroupName=bo_music
-UninstallDisplayIcon={app}\bo_music.exe
+DefaultGroupName=bo-music
+UninstallDisplayIcon={app}\bo-music.exe
 SetupIconFile=..\assets\bo_music.ico
 OutputDir={#OUTPUT_DIR}
-OutputBaseFilename=bo_music_{#APP_VERSION}_windows_x64_setup
+OutputBaseFilename=bo-music_{#APP_VERSION}_windows_x64_setup
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
@@ -47,8 +47,8 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 Source: "{#SOURCE_DIR}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\bo_music"; Filename: "{app}\bo_music.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\bo_music"; Filename: "{app}\bo_music.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\bo-music"; Filename: "{app}\bo-music.exe"; WorkingDir: "{app}"
+Name: "{autodesktop}\bo-music"; Filename: "{app}\bo-music.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\bo_music.exe"; WorkingDir: "{app}"; Description: "启动 bo_music"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\bo-music.exe"; WorkingDir: "{app}"; Description: "启动 bo-music"; Flags: nowait postinstall skipifsilent

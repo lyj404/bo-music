@@ -168,7 +168,7 @@ fn svg(
         (64, 105),
         24,
         palette.accent,
-        "bo_music  /  音波回忆",
+        "bo-music  /  音波回忆",
         44,
     );
     let heading = match style.kind {
@@ -195,7 +195,7 @@ fn svg(
         ),
     }
     rect(&mut svg, (64, 1112, PANEL_WIDTH, 2), 0, palette.panel);
-    text(&mut svg, (64, 1157), 23, palette.muted, "bo_music", 20);
+    text(&mut svg, (64, 1157), 23, palette.muted, "bo-music", 20);
     svg.push_str("</svg>");
     svg
 }

@@ -4,7 +4,7 @@ impl MusicApp {
     pub(super) fn render_home(&self, compact: bool, cx: &mut Context<Self>) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
         let Some(view) = &self.home else {
-            return div().p_4().child("正在加载发现页…").into_any_element();
+            return ui::empty_state("正在加载发现页", "好音乐即将呈现", cx).into_any_element();
         };
         let generation = view.generation;
         let queue_stamp = self
@@ -126,7 +126,7 @@ impl MusicApp {
                                 .id(("home-track", item_index * 10000 + index))
                                 .w_full()
                                 .min_w_0()
-                                .h(px(76.))
+                                .h(px(68.))
                                 .flex_shrink_0()
                                 .flex()
                                 .items_center()
@@ -134,8 +134,7 @@ impl MusicApp {
                                 .px_3()
                                 .py_2()
                                 .rounded_lg()
-                                .bg(rgb(0xf5f7fb))
-                                .child(self.cover(track.cover_url.as_deref(), 50.0, cx))
+                                .child(self.cover(track.cover_url.as_deref(), 48.0, cx))
                                 .child(
                                     div()
                                         .flex_1()
@@ -197,6 +196,7 @@ impl MusicApp {
                                 .child(
                                     div()
                                         .text_sm()
+                                        .truncate()
                                         .font_weight(gpui::FontWeight::MEDIUM)
                                         .child(playlist.name.clone()),
                                 )
@@ -322,19 +322,21 @@ impl MusicApp {
                                 |row| {
                                     let (account, queue) = queue_stamp.expect("queue checked");
                                     row.child(
-                                        div()
-                                            .id(("home-queue-module", item_index))
-                                            .cursor_pointer()
-                                            .text_sm()
-                                            .text_color(rgb(0x415de5))
-                                            .child("全部加入队列")
-                                            .on_click(cx.listener(move |this, _, _, _| {
+                                        ui::icon_button_labeled(
+                                            ("home-queue-module", item_index),
+                                            "list",
+                                            "全部加入队列",
+                                            cx,
+                                        )
+                                        .on_click(
+                                            cx.listener(move |this, _, _, _| {
                                                 let _ = this.service.commands.send(
                                                     Command::HomeQueueModule(
                                                         item_index, generation, account, queue,
                                                     ),
                                                 );
-                                            })),
+                                            }),
+                                        ),
                                     )
                                 },
                             ),
@@ -365,7 +367,7 @@ impl MusicApp {
                                         HomeContent::Playlists(_) | HomeContent::AiPreviews { .. }
                                     )
                                 ),
-                                |body| body.flex().flex_wrap(),
+                                |body| body.flex().flex_wrap().gap_3(),
                             )
                             .children(contents),
                     )
@@ -387,7 +389,13 @@ impl MusicApp {
             })
             .when(
                 !view.loading && !view.layout_error && view.items.is_empty() && !view.has_more,
-                |body| body.child("暂无发现内容"),
+                |body| {
+                    body.child(ui::empty_state(
+                        "暂无发现内容",
+                        "稍后刷新，探索更多音乐",
+                        cx,
+                    ))
+                },
             )
             .when(view.has_more && !view.loading, |body| {
                 body.child(
@@ -402,7 +410,7 @@ impl MusicApp {
     }
 
     fn render_home_hero(&self, compact: bool, cx: &mut Context<Self>) -> gpui::AnyElement {
-        let rgb = appearance::paint(cx);
+        let colors = appearance::palette(cx);
         let first = self.home.as_ref().and_then(|home| {
             home.items.iter().enumerate().find_map(|(module, item)| {
                 match item.feed.as_ref().map(|feed| &feed.content) {
@@ -416,16 +424,17 @@ impl MusicApp {
             })
         });
         div()
-            .h(px(235.))
+            .h(px(if compact { 228. } else { 248. }))
             .flex_shrink_0()
             .rounded_lg()
             .overflow_hidden()
+            .text_color(colors.hero_text)
             .mb_6()
             .flex()
             .bg(gpui::linear_gradient(
                 115.,
-                gpui::linear_color_stop(rgb(0xe9edff), 0.),
-                gpui::linear_color_stop(rgb(0xdbe4ff), 1.),
+                gpui::linear_color_stop(colors.hero_start, 0.),
+                gpui::linear_color_stop(colors.hero_end, 1.),
             ))
             .child(
                 div()
@@ -439,7 +448,7 @@ impl MusicApp {
                     .child(
                         div()
                             .text_size(px(11.))
-                            .text_color(rgb(0x687083))
+                            .text_color(colors.hero_muted)
                             .child("为今天，留一点音乐"),
                     )
                     .child(
@@ -457,11 +466,11 @@ impl MusicApp {
                     .child(
                         div()
                             .text_size(px(12.))
-                            .text_color(rgb(0x687083))
+                            .text_color(colors.hero_muted)
                             .child("每日精选 · 从熟悉的声音，遇见新的喜欢"),
                     )
                     .child(
-                        div().mt_3().flex().child(
+                        div().mt_3().flex().items_center().gap_3().child(
                             ui::primary_icon_button(
                                 "home-hero-play",
                                 if first.is_some() { "play" } else { "refresh" },
@@ -517,7 +526,7 @@ impl MusicApp {
     pub(super) fn render_library(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
         let Some(view) = &self.library else {
-            return div().p_4().child("正在加载乐库…").into_any_element();
+            return ui::empty_state("正在加载乐库", "正在整理音乐内容", cx).into_any_element();
         };
         let generation = view.generation;
         if let Some(group) = view.selected_group.and_then(|index| view.groups.get(index)) {

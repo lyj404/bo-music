@@ -682,8 +682,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "bo_music"
-version = "0.0.3"
+name = "bo-music"
+version = "0.0.4"
 dependencies = [
  "bo_music-app",
  "bo_music-domain",

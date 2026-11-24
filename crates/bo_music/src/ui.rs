@@ -81,8 +81,14 @@ pub fn icon_button_labeled(
     label: &'static str,
     cx: &App,
 ) -> Stateful<Div> {
-    let rgb = crate::appearance::paint(cx);
-    icon_control(id, name, label, rgb(0x20293a), rgb(0xe9edf5))
+    let palette = crate::appearance::palette(cx);
+    let (ink, hover) = match name {
+        "delete" => (palette.danger, palette.danger_hover),
+        "heart" => (palette.accent, palette.accent_hover),
+        "add" | "edit" | "share" | "refresh" => (palette.action, palette.hover),
+        _ => (palette.icon, palette.hover),
+    };
+    icon_control(id, name, label, ink, hover)
 }
 
 pub fn icon_button_on_dark(
@@ -90,7 +96,7 @@ pub fn icon_button_on_dark(
     name: &str,
     label: &'static str,
 ) -> Stateful<Div> {
-    icon_control(id, name, label, gpui::rgb(0xf8f9ff), gpui::rgb(0x454545))
+    icon_control(id, name, label, gpui::rgb(0xb5c3d6), gpui::rgb(0x38383d))
 }
 
 fn icon_control(
@@ -109,7 +115,10 @@ fn icon_control(
         .justify_center()
         .rounded_md()
         .cursor_pointer()
+        .text_color(ink)
         .hover(move |style| style.bg(hover))
+        .active(|style| style.opacity(0.65))
+        // GPUI Svg::paint requires its own color; parent text color is not inherited.
         .child(icon(name, ink))
         .tooltip(move |_, cx| cx.new(|_| Hint(label)).into())
 }
@@ -125,20 +134,22 @@ pub fn primary_icon_button(
     let rgb = crate::appearance::paint(cx);
     div()
         .id(id)
-        .size(px(36.))
+        .size(px(40.))
         .flex_shrink_0()
         .flex()
         .items_center()
         .justify_center()
-        .rounded_md()
+        .rounded_full()
         .bg(rgb(0x4d66e5))
+        .text_color(gpui::rgb(0xffffff))
         .child(icon(name, gpui::rgb(0xffffff)))
         .when(enabled, |button| {
             button
                 .cursor_pointer()
                 .hover(|style| style.bg(rgb(0x3854d5)))
+                .active(|style| style.opacity(0.85))
         })
-        .when(!enabled, |button| button.opacity(0.45))
+        .when(!enabled, |button| button.cursor_default().opacity(0.45))
         .tooltip(move |_, cx| cx.new(|_| Hint(label)).into())
 }
 
@@ -150,11 +161,33 @@ pub fn eyebrow(label: &'static str, cx: &App) -> Div {
 }
 pub fn heading(label: impl Into<gpui::SharedString>, cx: &App) -> Div {
     div()
-        .text_size(px(29.))
+        .text_size(px(27.))
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(crate::appearance::paint(cx)(0x20293a))
         .child(label.into())
 }
+/// Consistent loading and empty-content treatment across browsing pages.
+pub fn empty_state(title: &'static str, detail: &'static str, cx: &App) -> Div {
+    let colors = crate::appearance::palette(cx);
+    div()
+        .w_full()
+        .py_6()
+        .px_4()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap_2()
+        .text_color(colors.muted)
+        .child(icon("music", colors.muted).size(px(28.)))
+        .child(
+            div()
+                .text_sm()
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .child(title),
+        )
+        .child(div().text_size(px(12.)).child(detail))
+}
+
 pub fn section_label(label: &'static str, cx: &App) -> Div {
     div()
         .px_3()
@@ -181,7 +214,7 @@ pub fn slider(
         .child(
             div()
                 .w_full()
-                .h(px(3.))
+                .h(px(4.))
                 .rounded_full()
                 .bg(rgb(0xd8dce6))
                 .child(

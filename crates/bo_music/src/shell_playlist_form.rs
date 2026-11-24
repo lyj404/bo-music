@@ -80,7 +80,9 @@ impl MusicApp {
                     .flex_col()
                     .rounded_lg()
                     .overflow_hidden()
-                    .bg(rgb(0xffffff))
+                    .bg(appearance::palette(cx).elevated)
+                    .border_1()
+                    .border_color(appearance::palette(cx).border)
                     .shadow_lg()
                     .child(
                         div()

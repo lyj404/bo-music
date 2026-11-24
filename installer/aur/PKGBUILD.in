@@ -1,5 +1,5 @@
 # Maintainer: lyj404
-pkgname=bo_music
+pkgname=bo-music
 pkgver=@PKGVER@
 pkgrel=1
 pkgdesc='A modern Fluent-style music player'
@@ -8,14 +8,16 @@ url='@URL@'
 license=('GPL-3.0-or-later')
 depends=('glibc' 'gcc-libs' 'libxcb' 'libxkbcommon' 'libxkbcommon-x11' 'libx11' 'fontconfig' 'vulkan-icd-loader' 'libsecret' 'mpv' 'dbus')
 optdepends=('libpulse: parec command for audio spectrum visualization')
+conflicts=('bo_music')
+replaces=('bo_music')
 options=('!strip' '!debug')
 source_x86_64=('@SOURCE_URL@')
 sha256sums_x86_64=('@SHA256@')
 
 package() {
-    cd "$srcdir/bo_music_@VERSION@_linux_x64"
-    install -Dm755 bo_music "$pkgdir/usr/bin/bo_music"
+    cd "$srcdir/bo-music_@VERSION@_linux_x64"
+    install -Dm755 bo-music "$pkgdir/usr/bin/bo-music"
     install -Dm644 bo_music.desktop "$pkgdir/usr/share/applications/bo_music.desktop"
     install -Dm644 bo_music.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/bo_music.png"
-    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/bo_music/LICENSE"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/bo-music/LICENSE"
 }

@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)][string]$Version,
-    [string]$Binary = 'target/release/bo_music.exe',
+    [string]$Binary = 'target/release/bo-music.exe',
     [string]$OutputDirectory = 'target/dist'
 )
 $ErrorActionPreference = 'Stop'
@@ -26,7 +26,7 @@ $languageFile = Join-Path $root 'installer/languages/ChineseSimplified.isl'
 if (-not (Test-Path -LiteralPath $languageFile -PathType Leaf)) { throw "The bundled Inno Setup Simplified Chinese translation is missing: $languageFile" }
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 $output = (Resolve-Path -LiteralPath $OutputDirectory).Path
-$name = "bo_music_${Version}_windows_x64"
+$name = "bo-music_${Version}_windows_x64"
 $bundle = Join-Path $output $name
 $zip = Join-Path $output "$name.zip"
 $setup = Join-Path $output "${name}_setup.exe"
@@ -34,7 +34,7 @@ foreach ($path in @($bundle, $zip, $setup)) {
     if (Test-Path -LiteralPath $path) { throw "Output already exists: $path" }
 }
 New-Item -ItemType Directory -Path $bundle | Out-Null
-Copy-Item -LiteralPath $binaryPath -Destination (Join-Path $bundle 'bo_music.exe')
+Copy-Item -LiteralPath $binaryPath -Destination (Join-Path $bundle 'bo-music.exe')
 Copy-Item -LiteralPath $runtimePath -Destination $bundle
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $bundle
 Copy-Item -LiteralPath (Join-Path $root 'libmpv/README.md') -Destination (Join-Path $bundle 'libmpv-README.md')

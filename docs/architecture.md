@@ -9,7 +9,7 @@
 | `bo_music-storage` | 设置、凭据、队列和历史记录持久化 |
 | `bo_music-playback` | libmpv、音效、频谱及平台音频输出 |
 | `bo_music-app` | 业务协调、播放队列和后台服务 |
-| `bo_music` | GPUI 页面、窗口和交互 |
+| `bo-music` | GPUI 页面、窗口和交互 |
 | `bo_music-cli` | API 与播放诊断入口 |
 
 ## 界面状态

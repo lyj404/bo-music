@@ -83,7 +83,7 @@ impl MiniPlayer {
         let result = cx.open_window(
             WindowOptions {
                 titlebar: Some(TitlebarOptions {
-                    title: Some("bo_music · 迷你播放器".into()),
+                    title: Some("bo-music · 迷你播放器".into()),
                     appears_transparent: cfg!(windows),
                     ..Default::default()
                 }),
@@ -172,7 +172,7 @@ impl MiniPlayer {
                     } else {
                         0xf8f9ff
                     }))
-                    .hover(|row| row.bg(rgb(0x373737)))
+                    .hover(|row| row.bg(rgb(0x38383d)))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.send(
                             Command::EditQueue(account, revision, QueueEdit::Select(index)),
@@ -240,7 +240,7 @@ impl Render for MiniPlayer {
             return div()
                 .id("mini-dock-ribbon")
                 .size_full()
-                .bg(rgb(0x202020))
+                .bg(rgb(0x202023))
                 .text_color(rgb(0xf8f9ff))
                 .flex()
                 .items_center()
@@ -293,7 +293,7 @@ impl Render for MiniPlayer {
             .gap_2()
             .p_3()
             .text_sm()
-            .bg(rgb(0x202020))
+            .bg(rgb(0x202023))
             .text_color(rgb(0xf8f9ff))
             .when_some(
                 crate::appearance::font(crate::appearance::FontTarget::Interface, cx),
@@ -383,7 +383,7 @@ impl Render for MiniPlayer {
                             .flex_1()
                             .h(px(4.))
                             .rounded_sm()
-                            .bg(rgb(0x454545))
+                            .bg(rgb(0x3c3c42))
                             .child(
                                 div()
                                     .w(gpui::relative(progress))
@@ -410,7 +410,7 @@ fn button(id: &'static str, label: &'static str) -> Stateful<Div> {
         .px_2()
         .py_1()
         .rounded_md()
-        .hover(|button| button.bg(rgb(0x373737)))
+        .hover(|button| button.bg(rgb(0x38383d)))
         .child(label)
 }
 

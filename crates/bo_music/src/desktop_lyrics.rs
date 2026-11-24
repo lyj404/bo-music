@@ -151,7 +151,7 @@ fn open_overlay(
     };
     let options = WindowOptions {
         titlebar: Some(TitlebarOptions {
-            title: Some("bo_music · 桌面歌词".into()),
+            title: Some("bo-music · 桌面歌词".into()),
             appears_transparent: true,
             ..Default::default()
         }),

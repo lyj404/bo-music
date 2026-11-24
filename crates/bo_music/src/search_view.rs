@@ -121,10 +121,10 @@ impl MusicApp {
             .occlude()
             .p_2()
             .rounded_lg()
-            .bg(rgb(0xffffff))
+            .bg(appearance::palette(cx).elevated)
             .border_1()
             .border_color(rgb(0xd8dce6))
-            .shadow_lg()
+            .shadow_md()
             .on_mouse_down_out(cx.listener(|this, _, _, cx| this.dismiss_search_assist(cx)))
             .child(
                 div()

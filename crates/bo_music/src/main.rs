@@ -325,7 +325,7 @@ fn main() {
         Ok(Some(primary)) => primary,
         Ok(None) => return,
         Err(error) => {
-            eprintln!("无法启动bo_music：{error}");
+            eprintln!("无法启动bo-music：{error}");
             std::process::exit(1);
         }
     };
@@ -365,7 +365,7 @@ fn main() {
                         display_id,
                         app_id: Some("bo_music".into()),
                         titlebar: Some(gpui::TitlebarOptions {
-                            title: Some("bo_music".into()),
+                            title: Some("bo-music".into()),
                             ..Default::default()
                         }),
                         ..Default::default()

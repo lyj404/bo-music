@@ -501,12 +501,13 @@ impl MusicApp {
                         } else {
                             page.font_size
                         }))
-                        .text_color(rgb(if current { 0x415de5 } else { 0x788196 }))
+                        .text_color(rgb(if current { 0x415de5 } else { 0x687083 }))
                         .font_weight(if current {
                             FontWeight::SEMIBOLD
                         } else {
                             FontWeight::MEDIUM
                         })
+                        .when(current, |row| row.bg(rgb(0xe9edff)))
                         .cursor_pointer()
                         .hover(|row| row.bg(rgb(0xe9edf5)));
                     let target = line.start_ms as f64 / 1000.;

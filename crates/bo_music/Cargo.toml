@@ -1,9 +1,13 @@
 [package]
-name = "bo_music"
-version = "0.0.3"
+name = "bo-music"
+version = "0.0.4"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+
+[[bin]]
+name = "bo-music"
+path = "src/main.rs"
 
 [dependencies]
 bo_music-app.workspace = true

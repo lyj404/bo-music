@@ -7,6 +7,7 @@ impl MusicApp {
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
+        let palette = appearance::palette(cx);
         let player = self.player.as_ref();
         let menu_open = self.panels.player_tools_open;
         let playing = player.is_some_and(|p| p.state == PlaybackState::Playing);
@@ -35,7 +36,7 @@ impl MusicApp {
         let title = player
             .map_or("选择一首音乐，开始聆听", |p| p.title.as_str())
             .to_owned();
-        let artist = player.map_or("bo_music", |p| p.artist.as_str()).to_owned();
+        let artist = player.map_or("bo-music", |p| p.artist.as_str()).to_owned();
         let left = div()
             .w(px(if compact { 180. } else { 230. }))
             .flex_shrink_0()
@@ -122,9 +123,10 @@ impl MusicApp {
                     .child(
                         div()
                             .id("toggle")
-                            .size(px(36.))
+                            .size(px(40.))
                             .rounded_full()
                             .bg(rgb(0x4d66e5))
+                            .hover(|button| button.bg(rgb(0x3854d5)))
                             .cursor_pointer()
                             .flex()
                             .items_center()
@@ -258,8 +260,8 @@ impl MusicApp {
             .flex_shrink_0()
             .px_6()
             .border_t_1()
-            .border_color(rgb(0xd8dce6))
-            .bg(rgb(0xffffff))
+            .border_color(palette.border)
+            .bg(palette.elevated)
             .flex()
             .items_center()
             .justify_between()

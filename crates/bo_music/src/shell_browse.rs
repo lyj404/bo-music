@@ -57,7 +57,11 @@ impl MusicApp {
                             .items_center()
                             .gap_6()
                             .pb_5()
-                            .child(self.cover(view.cover_url.as_deref(), 170., cx))
+                            .child(self.cover(
+                                view.cover_url.as_deref(),
+                                if compact { 112. } else { 160. },
+                                cx,
+                            ))
                             .child(
                                 div()
                                     .flex_1()
@@ -214,33 +218,47 @@ impl MusicApp {
                                     CollectionState::Hidden | CollectionState::Owned => "",
                                 };
                                 row.child(
-                                    div()
-                                        .id("collection-toggle")
-                                        .px_3()
-                                        .py_2()
-                                        .rounded_md()
-                                        .bg(rgb(0xe9edf5))
-                                        .child(label)
-                                        .when(
-                                            matches!(
-                                                state,
-                                                CollectionState::Ready(_)
-                                                    | CollectionState::Unknown
-                                            ),
-                                            |button| {
-                                                button.cursor_pointer().on_click(cx.listener(
-                                                    move |this, _, _, _| {
-                                                        let command =
-                                                            if state == CollectionState::Unknown {
-                                                                Command::LoadCollectionState
-                                                            } else {
-                                                                Command::ToggleCollection
-                                                            };
-                                                        let _ = this.service.commands.send(command);
-                                                    },
-                                                ))
-                                            },
+                                    ui::icon_button_labeled(
+                                        "collection-toggle",
+                                        if state == CollectionState::Unknown {
+                                            "refresh"
+                                        } else {
+                                            "heart"
+                                        },
+                                        label,
+                                        cx,
+                                    )
+                                    .when(state == CollectionState::Ready(true), |button| {
+                                        button.bg(rgb(0xe9edff))
+                                    })
+                                    .when(
+                                        matches!(
+                                            state,
+                                            CollectionState::Loading
+                                                | CollectionState::Writing
+                                                | CollectionState::LoginRequired
                                         ),
+                                        |button| button.opacity(0.45).cursor_default(),
+                                    )
+                                    .when(
+                                        matches!(
+                                            state,
+                                            CollectionState::Ready(_) | CollectionState::Unknown
+                                        ),
+                                        |button| {
+                                            button.cursor_pointer().on_click(cx.listener(
+                                                move |this, _, _, _| {
+                                                    let command =
+                                                        if state == CollectionState::Unknown {
+                                                            Command::LoadCollectionState
+                                                        } else {
+                                                            Command::ToggleCollection
+                                                        };
+                                                    let _ = this.service.commands.send(command);
+                                                },
+                                            ))
+                                        },
+                                    ),
                                 )
                             },
                         )
@@ -550,16 +568,16 @@ impl MusicApp {
                 )
                 .into_any_element()
         } else {
-            div()
-                .flex_1()
-                .p_4()
-                .text_color(rgb(0x8a91a2))
-                .child(if self.navigation.page == Page::PlaylistSquare {
-                    "正在加载歌单分类…"
+            ui::empty_state(
+                if self.navigation.page == Page::PlaylistSquare {
+                    "正在加载歌单分类"
                 } else {
-                    "输入关键词开始搜索"
-                })
-                .into_any_element()
+                    "发现喜欢的音乐"
+                },
+                "搜索歌曲、歌手、专辑或歌单",
+                cx,
+            )
+            .into_any_element()
         }
     }
 }

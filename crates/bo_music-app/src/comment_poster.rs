@@ -58,7 +58,7 @@ fn make_poster(
         "<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='760' height='{height}'>"
     );
     rect(&mut svg, (0, 0, 760, height), 0, "#151932");
-    text(&mut svg, (48, 79), 32, "#aab7ff", "bo_music / 歌曲评论", 42);
+    text(&mut svg, (48, 79), 32, "#aab7ff", "bo-music / 歌曲评论", 42);
     image(&mut svg, (48, 109, 64), avatar, "#262d52");
     text(&mut svg, (130, 136), 28, "#ffffff", &comment.nickname, 36);
     let meta = format!(

@@ -1,7 +1,9 @@
+# bo-music
+
 ## 运行
 
 ```bash
-cargo run -p bo_music
+cargo run -p bo-music
 ```
 
 项目的 crate 职责和内部模块约定见[项目结构](docs/architecture.md)。
@@ -12,7 +14,7 @@ cargo run -p bo_music
 
 ```bash
 cargo update -p libc --precise 0.2.186
-cargo run -p bo_music
+cargo run -p bo-music
 ```
 
 该命令会更新 `Cargo.lock`。不要将 `ENOATTR` 替换为 `ENOSTR`，它们是不同的错误码。

@@ -102,7 +102,7 @@ impl TrayState {
             hIcon: self.icon.handle,
             ..Default::default()
         };
-        for (slot, unit) in data.szTip.iter_mut().zip("bo_music".encode_utf16()) {
+        for (slot, unit) in data.szTip.iter_mut().zip("bo-music".encode_utf16()) {
             *slot = unit;
         }
         data
@@ -217,7 +217,7 @@ fn popup_menu(hwnd: HWND, anchor: Option<POINT>) -> i32 {
             AppendMenuW(menu, MF_STRING, id, label);
         }
         AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
-        AppendMenuW(menu, MF_STRING, MENU_EXIT, windows_sys::w!("退出bo_music"));
+        AppendMenuW(menu, MF_STRING, MENU_EXIT, windows_sys::w!("退出bo-music"));
         let mut cursor = anchor.unwrap_or_default();
         let selected = if anchor.is_some() || GetCursorPos(&mut cursor) != 0 {
             SetForegroundWindow(hwnd);

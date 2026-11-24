@@ -260,7 +260,7 @@ impl Root {
     }
     #[zbus(property)]
     fn identity(&self) -> &str {
-        "bo_music"
+        "bo-music"
     }
     #[zbus(property)]
     fn desktop_entry(&self) -> &str {

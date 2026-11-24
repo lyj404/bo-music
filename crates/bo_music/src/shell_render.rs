@@ -5,6 +5,7 @@ impl Render for MusicApp {
         let compact = window.viewport_size().width < px(1050.);
         let background = self.appearance_background(window, cx);
         let rgb = appearance::paint(cx);
+        let palette = appearance::palette(cx);
         if let Some(video) = self.render_mv(window, cx) {
             return video;
         }
@@ -38,10 +39,8 @@ impl Render for MusicApp {
             .min_h_0()
             .flex()
             .flex_col()
-            .border_1()
-            .border_color(rgb(0xd8dce6))
             .rounded_tl_lg()
-            .bg(rgb(0xffffff))
+            .bg(palette.surface)
             .child(header);
         let center = self.render_shell_overlays(center, cx).child(body);
         let modal = self.render_playlist_modal(cx);
@@ -51,7 +50,7 @@ impl Render for MusicApp {
             .flex()
             .flex_col()
             .bg(background)
-            .text_color(rgb(0x20293a))
+            .text_color(palette.text)
             .text_size(px(14.))
             .when_some(
                 appearance::font(appearance::FontTarget::Interface, cx),

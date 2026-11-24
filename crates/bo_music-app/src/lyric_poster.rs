@@ -59,7 +59,7 @@ pub fn render(lyrics: &Lyrics) -> Result<Vec<u8>, RenderError> {
             38,
         );
     }
-    text(&mut svg, (52, height - 33), 22, &foreground, "bo_music", 12);
+    text(&mut svg, (52, height - 33), 22, &foreground, "bo-music", 12);
     svg.push_str("</svg>");
     rasterize_png_with_font(&svg, width, height, &lyrics.style.font_family).map_err(|_| RenderError)
 }

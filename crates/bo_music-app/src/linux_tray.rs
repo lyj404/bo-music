@@ -119,7 +119,7 @@ impl Item {
     }
     #[zbus(property)]
     fn title(&self) -> &str {
-        "bo_music"
+        "bo-music"
     }
     #[zbus(property)]
     fn status(&self) -> &str {
@@ -163,7 +163,7 @@ impl Item {
     }
     #[zbus(property)]
     fn tool_tip(&self) -> (&str, Pixmaps, &str, &str) {
-        ("", Vec::new(), "bo_music", "")
+        ("", Vec::new(), "bo-music", "")
     }
     #[zbus(property)]
     fn item_is_menu(&self) -> bool {
@@ -200,7 +200,7 @@ const ROWS: [(i32, &str); 6] = [
     (3, "上一首"),
     (4, "下一首"),
     (5, ""),
-    (6, "退出bo_music"),
+    (6, "退出bo-music"),
 ];
 
 fn row_properties(id: i32, requested: &[&str]) -> Option<Properties> {

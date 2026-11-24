@@ -53,12 +53,68 @@ pub(super) fn observe(window: &mut Window, cx: &Context<MusicApp>) {
 
 pub(super) fn paint(cx: &App) -> impl Fn(u32) -> Rgba + Copy + use<> {
     let dark = cx.try_global::<Appearance>().is_some_and(Appearance::dark);
+    let colors = palette(cx);
     move |light| {
+        match light {
+            0xffffff => return colors.surface,
+            0xf5f7fb => return colors.background,
+            0xd8dce6 => return colors.border,
+            0x20293a => return colors.text,
+            0x687083 | 0x788196 => return colors.muted,
+            0xe9edf5 => return colors.hover,
+            _ => {}
+        }
         gpui::rgb(if dark {
             dark_color(light)
         } else {
             light_color(light)
         })
+    }
+}
+
+/// Shared surfaces and text roles for the application shell.
+#[derive(Clone, Copy)]
+pub(super) struct Palette {
+    pub background: Rgba,
+    pub surface: Rgba,
+    pub elevated: Rgba,
+    pub border: Rgba,
+    pub text: Rgba,
+    pub muted: Rgba,
+    pub accent: Rgba,
+    pub hover: Rgba,
+    pub icon: Rgba,
+    pub action: Rgba,
+    pub danger: Rgba,
+    pub danger_hover: Rgba,
+    pub accent_hover: Rgba,
+    pub hero_start: Rgba,
+    pub hero_end: Rgba,
+    pub hero_text: Rgba,
+    pub hero_muted: Rgba,
+}
+
+pub(super) fn palette(cx: &App) -> Palette {
+    let dark = cx.try_global::<Appearance>().is_some_and(Appearance::dark);
+    let color = |light, dark_color| gpui::rgb(if dark { dark_color } else { light });
+    Palette {
+        background: color(0xf1f3f5, 0x202023),
+        surface: color(0xfbfcfd, 0x29292d),
+        elevated: color(0xffffff, 0x313136),
+        border: color(0xe2e6eb, 0x3c3c42),
+        text: color(0x303640, 0xf5f5f5),
+        muted: color(0x626d7b, 0xb8b8c0),
+        accent: color(ACCENT, ACCENT_ON_DARK),
+        hover: color(0xeceff3, 0x38383d),
+        icon: color(0x66788f, 0xb5c3d6),
+        action: color(0x4c709f, 0x9cbce6),
+        danger: color(0xb54855, 0xf29aa5),
+        danger_hover: color(0xfbecef, 0x4a2d35),
+        accent_hover: color(0xf9eef1, 0x442932),
+        hero_start: color(0xf0f3f8, 0x442932),
+        hero_end: color(0xe3e9f2, 0x56303d),
+        hero_text: color(0x303e53, 0xf5f5f5),
+        hero_muted: color(0x5c6b80, 0xb8b8c0),
     }
 }
 
@@ -70,10 +126,10 @@ fn light_color(color: u32) -> u32 {
         0x788196 | 0x8a91a2 | 0x9ca4b4 => 0x818188,
         0x415de5 | 0x4d66e5 | 0x354db6 => ACCENT,
         0x3854d5 => ACCENT_HOVER,
-        0xe9edff | 0xe8edff => 0xfce8ec,
-        0xdbe4ff => 0xf6cbd3,
+        0xe9edff | 0xe8edff => 0xf9eef1,
+        0xdbe4ff => 0xf1dfe5,
         0xe9edf5 | 0xf1f3f9 | 0xeeeeee => 0xf3f3f5,
-        0xd8dce6 => 0xe8e8ec,
+        0xd8dce6 => 0xe6e6e9,
         _ => color,
     }
 }
@@ -85,10 +141,10 @@ fn dark_color(light: u32) -> u32 {
         0xf1f3f9 | 0xeeeeee | 0xe9edf5 => 0x353535,
         0xe9edff | 0xe8edff => 0x442932,
         0xdbe4ff => 0x56303d,
-        0xd8dce6 => 0x4a5469,
+        0xd8dce6 => 0x3c3c42,
         0x20293a => 0xf5f5f5,
-        0x687083 | 0x788196 => 0xc1cada,
-        0x8a91a2 | 0x9ca4b4 | 0xaab0bd => 0xaeb9cc,
+        0x687083 | 0x788196 => 0xb8b8c0,
+        0x8a91a2 | 0x9ca4b4 | 0xaab0bd => 0xa7a7b0,
         0x354db6 | 0x415de5 => ACCENT_ON_DARK,
         0x4d66e5 => ACCENT,
         0x3854d5 => ACCENT_HOVER,
@@ -224,7 +280,7 @@ impl MusicApp {
             });
             self.appearance_page.applied_acrylic = acrylic;
         }
-        let mut color = paint(cx)(0xf5f7fb);
+        let mut color = palette(cx).background;
         if acrylic {
             color.a = 0.92;
         }

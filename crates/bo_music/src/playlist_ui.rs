@@ -98,7 +98,7 @@ impl MusicApp {
             .w(px(size))
             .h(px(size))
             .flex_shrink_0()
-            .rounded_md()
+            .rounded_lg()
             .overflow_hidden()
             .bg(rgb(0xe9edf5))
             .when(image.is_none(), |element| {

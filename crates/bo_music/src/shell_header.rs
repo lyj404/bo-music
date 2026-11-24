@@ -7,6 +7,7 @@ impl MusicApp {
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
         let rgb = appearance::paint(cx);
+        let colors = appearance::palette(cx);
         let account_open = self.show_account;
         let history_open = self.search.show_history && !self.search.assist_dismissed;
         let hot_open = self.search.show_hot_words && !self.search.assist_dismissed;
@@ -18,7 +19,7 @@ impl MusicApp {
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| "登录".into());
         div()
-            .h(px(72.))
+            .h(px(64.))
             .flex_shrink_0()
             .px_6()
             .flex()
@@ -37,9 +38,9 @@ impl MusicApp {
                     .flex_1()
                     .min_w(px(160.))
                     .rounded_md()
-                    .bg(rgb(0xf5f7fb))
+                    .bg(colors.elevated)
                     .border_1()
-                    .border_color(rgb(0xd8dce6))
+                    .border_color(colors.border)
                     .flex()
                     .items_center()
                     .px_3()

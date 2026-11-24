@@ -21,9 +21,9 @@ command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb is required" >&2; exit 1
 test -f "$binary" || { echo "Binary not found: $binary" >&2; exit 1; }
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-name="bo_music_${version}_linux_${arch}"
+name="bo-music_${version}_linux_${arch}"
 deb_version=$(printf '%s' "$version" | tr '-' '~')
-deb="$output/bo_music_${version}_amd64.deb"
+deb="$output/bo-music_${version}_amd64.deb"
 mkdir -p -- "$output"
 for path in "$output/$name" "$output/$name.tar.gz" "$deb" "$output/${name}_SHA256SUMS.txt"; do
     if [ -e "$path" ]; then
@@ -36,13 +36,13 @@ trap 'rm -rf -- "$stage"' EXIT HUP INT TERM
 chmod 755 "$stage"
 
 mkdir -- "$output/$name"
-install -m 755 -- "$binary" "$output/$name/bo_music"
+install -m 755 -- "$binary" "$output/$name/bo-music"
 install -m 644 -- "$root/assets/bo_music.png" "$output/$name/bo_music.png"
 install -m 644 -- "$root/LICENSE" \
     "$root/installer/bo_music.desktop" "$output/$name/"
 tar -czf "$output/$name.tar.gz" -C "$output" "$name"
 
-install -Dm755 -- "$binary" "$stage/usr/bin/bo_music"
+install -Dm755 -- "$binary" "$stage/usr/bin/bo-music"
 install -Dm644 -- "$root/installer/bo_music.desktop" "$stage/usr/share/applications/bo_music.desktop"
 install -Dm644 -- "$root/assets/bo_music.png" "$stage/usr/share/icons/hicolor/256x256/apps/bo_music.png"
 install -Dm644 -- "$root/LICENSE" "$stage/usr/share/doc/bo-music/copyright"
@@ -54,13 +54,12 @@ Version: $deb_version
 Section: sound
 Priority: optional
 Architecture: amd64
-Maintainer: bo_music maintainers
+Maintainer: bo-music maintainers
 Installed-Size: $installed_size
 Depends: libc6 (>= 2.39), libgcc-s1, libxcb1, libxkbcommon0, libxkbcommon-x11-0, libx11-6, libfontconfig1, libvulkan1, libwayland-client0, libsecret-1-0, libmpv2, dbus
 Recommends: pulseaudio-utils, mesa-vulkan-drivers
 Description: Modern Fluent-style music player
  A desktop music player with playlists, lyrics and audio effects.
 EOF
-# Debian package names cannot contain underscores; the executable remains bo_music.
 dpkg-deb --root-owner-group --build "$stage" "$deb"
-(cd -- "$output" && sha256sum "$name.tar.gz" "bo_music_${version}_amd64.deb" > "${name}_SHA256SUMS.txt")
+(cd -- "$output" && sha256sum "$name.tar.gz" "bo-music_${version}_amd64.deb" > "${name}_SHA256SUMS.txt")
