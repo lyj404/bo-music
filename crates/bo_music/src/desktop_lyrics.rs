@@ -32,33 +32,36 @@ pub(super) struct DesktopLyrics {
 impl MusicApp {
     pub(super) fn desktop_lyrics_buttons(&self, cx: &mut Context<Self>) -> Div {
         let open = self.desktop_lyrics.is_some();
-        let buttons = div().flex().gap_3().child(
-            div()
-                .id("desktop-lyrics-toggle")
-                .cursor_pointer()
-                .text_color(rgb(0x415de5))
-                .child(if open {
+        let buttons = div().flex().gap_1().child(
+            super::ui::icon_button_labeled(
+                "desktop-lyrics-toggle",
+                "desktop-lyrics",
+                if open {
                     "关闭桌面歌词"
                 } else {
                     "桌面歌词"
-                })
-                .on_click(
-                    cx.listener(|this, _, window, cx| this.toggle_desktop_lyrics(window, cx)),
-                ),
+                },
+                cx,
+            )
+            .when(open, |button| {
+                button.bg(super::appearance::palette(cx).accent_hover)
+            })
+            .on_click(cx.listener(|this, _, window, cx| this.toggle_desktop_lyrics(window, cx))),
         );
         #[cfg(windows)]
         let buttons = buttons.when(open, |buttons| {
             buttons.child(
-                div()
-                    .id("desktop-lyrics-input-toggle")
-                    .cursor_pointer()
-                    .text_color(rgb(0x415de5))
-                    .child(if self.desktop_lyrics_locked {
+                super::ui::icon_button_labeled(
+                    "desktop-lyrics-input-toggle",
+                    "lock",
+                    if self.desktop_lyrics_locked {
                         "解锁歌词"
                     } else {
                         "锁定歌词"
-                    })
-                    .on_click(cx.listener(|this, _, _, cx| this.toggle_desktop_lyrics_input(cx))),
+                    },
+                    cx,
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.toggle_desktop_lyrics_input(cx))),
             )
         });
         buttons

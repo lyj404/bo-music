@@ -74,6 +74,8 @@ impl Render for MusicApp {
                     }
                     this.dismiss_search_assist(cx);
                     this.panels.player_tools_open = false;
+                    this.panels.show_effects = false;
+                    this.panels.show_quality = false;
                     this.row_actions = None;
                     this.panels.side_panel_open = false;
                     this.close_comments(cx);
@@ -133,10 +135,6 @@ impl MusicApp {
             self.render_comment_image(cx)
         } else if self.panels.show_comments {
             self.render_comments_panel(cx)
-        } else if self.panels.show_quality {
-            self.render_quality_panel(cx)
-        } else if self.panels.show_effects {
-            self.render_effects_panel(false, cx)
         } else if self.panels.show_lyrics {
             self.render_lyrics_panel(cx)
         } else {

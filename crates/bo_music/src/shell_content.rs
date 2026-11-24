@@ -534,6 +534,11 @@ impl MusicApp {
             .when(self.panels.side_panel_open, |root| {
                 root.child(
                     div()
+                        .id("playback-side-panel")
+                        // This panel overlays sibling scroll views. Keep wheel events inside
+                        // its hitbox, including when the inner list reaches either boundary.
+                        .occlude()
+                        .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
                         .absolute()
                         .right_0()
                         .top_0()
@@ -689,54 +694,6 @@ impl MusicApp {
                                 )
                                 .child(
                                     div()
-                                        .id("effects-tab")
-                                        .px_2()
-                                        .py_1()
-                                        .rounded_md()
-                                        .when(self.panels.show_effects, |item| {
-                                            item.bg(rgb(0xe9edff))
-                                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        })
-                                        .cursor_pointer()
-                                        .text_color(if self.panels.show_effects {
-                                            rgb(0x415de5)
-                                        } else {
-                                            rgb(0x8a91a2)
-                                        })
-                                        .child("音效")
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.close_comments(cx);
-                                            this.panels.show_effects = true;
-                                            this.panels.show_quality = false;
-                                            cx.notify();
-                                        })),
-                                )
-                                .child(
-                                    div()
-                                        .id("quality-tab")
-                                        .px_2()
-                                        .py_1()
-                                        .rounded_md()
-                                        .when(self.panels.show_quality, |item| {
-                                            item.bg(rgb(0xe9edff))
-                                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        })
-                                        .cursor_pointer()
-                                        .text_color(if self.panels.show_quality {
-                                            rgb(0x415de5)
-                                        } else {
-                                            rgb(0x8a91a2)
-                                        })
-                                        .child("音质")
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.close_comments(cx);
-                                            this.panels.show_quality = true;
-                                            this.panels.show_effects = false;
-                                            cx.notify();
-                                        })),
-                                )
-                                .child(
-                                    div()
                                         .id("comments-tab")
                                         .px_2()
                                         .py_1()
@@ -766,35 +723,6 @@ impl MusicApp {
                                             cx.notify();
                                         })),
                                 ),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .flex_wrap()
-                                .gap_2()
-                                .text_sm()
-                                .pb_3()
-                                .child(
-                                    div()
-                                        .id("immersive-lyrics-open")
-                                        .cursor_pointer()
-                                        .text_color(rgb(0x415de5))
-                                        .child("展开歌词")
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.open_immersive_lyrics(window, cx)
-                                        })),
-                                )
-                                .child(
-                                    div()
-                                        .id("mini-player-open")
-                                        .cursor_pointer()
-                                        .text_color(rgb(0x415de5))
-                                        .child("迷你播放器")
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.open_mini_player(window, cx)
-                                        })),
-                                )
-                                .child(self.desktop_lyrics_buttons(cx)),
                         )
                         .child(side_body),
                 )

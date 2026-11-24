@@ -191,67 +191,130 @@ impl MusicApp {
                     ),
             );
         let tools = div()
-            .w(px(if compact { 160. } else { 230. }))
+            .w(px(if compact {
+                200.
+            } else if cfg!(windows) {
+                420.
+            } else {
+                400.
+            }))
             .flex_shrink_0()
             .flex()
-            .items_center()
-            .justify_end()
-            .gap_2()
-            .child(ui::icon("volume", rgb(0x687083)))
+            .when(compact, |tools| tools.flex_col().items_end().gap_1())
+            .when(!compact, |tools| tools.items_center().justify_end().gap_5())
             .child(
                 div()
-                    .w(px(if compact { 45. } else { 65. }))
-                    .child(ui::slider(
-                        f64::from(volume) / 100.,
-                        rgb,
-                        move |fraction, cx| {
-                            let _ = volume_entity.update(cx, |this, _| {
-                                let _ = this
-                                    .service
-                                    .commands
-                                    .send(Command::SetVolume((fraction * 100.).round()));
-                            });
-                        },
-                    )),
-            )
-            .child(
-                div()
-                    .id("toggle-lyrics-panel")
-                    .size(px(34.))
-                    .rounded_md()
                     .flex()
                     .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .when(self.lyric_page.open, |button| {
-                        button.bg(rgb(0xe9edff)).text_color(rgb(0x415de5))
-                    })
-                    .hover(|button| button.bg(rgb(0xe9edf5)))
-                    .child("词")
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        if this.lyric_page.open {
-                            this.close_immersive_lyrics(window, cx);
-                        } else {
-                            this.open_immersive_lyrics(window, cx);
-                        }
-                    })),
+                    .gap_2()
+                    .children(
+                        [(false, "equalizer", "音效"), (true, "quality", "音质")]
+                            .into_iter()
+                            .map(|(quality, icon, label)| {
+                                let open = !self.panels.side_panel_open
+                                    && if quality {
+                                        self.panels.show_quality
+                                    } else {
+                                        self.panels.show_effects
+                                    };
+                                ui::icon_button_labeled(label, icon, label, cx)
+                                    .when(open, |button| button.bg(rgb(0xe9edff)))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        if this.lyric_page.open {
+                                            this.close_immersive_lyrics(window, cx);
+                                        }
+                                        this.close_comments(cx);
+                                        this.panels.side_panel_open = false;
+                                        this.panels.player_tools_open = false;
+                                        this.panels.show_lyrics = false;
+                                        this.panels.show_quality = quality && !open;
+                                        this.panels.show_effects = !quality && !open;
+                                        cx.notify();
+                                    }))
+                            }),
+                    )
+                    .child(ui::icon("volume", rgb(0x687083)))
+                    .child(
+                        div()
+                            .w(px(if compact { 45. } else { 65. }))
+                            .child(ui::slider(
+                                f64::from(volume) / 100.,
+                                rgb,
+                                move |fraction, cx| {
+                                    let _ = volume_entity.update(cx, |this, _| {
+                                        let _ = this
+                                            .service
+                                            .commands
+                                            .send(Command::SetVolume((fraction * 100.).round()));
+                                    });
+                                },
+                            )),
+                    ),
             )
             .child(
-                ui::icon_button("toggle-queue-panel", "list", cx)
-                    .when(self.panels.side_panel_open, |button| {
-                        button.bg(rgb(0xe9edff))
+                div()
+                    .flex()
+                    .items_center()
+                    .when(compact, |group| group.gap_1())
+                    .when(!compact, |group| {
+                        group
+                            .gap_3()
+                            .pl_3()
+                            .border_l_1()
+                            .border_color(palette.border)
                     })
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        if this.lyric_page.open {
-                            this.close_immersive_lyrics(window, cx);
-                        }
-                        this.close_comments(cx);
-                        this.panels.side_panel_open = !this.panels.side_panel_open;
-                        this.panels.show_lyrics = false;
-                        this.panels.show_effects = false;
-                        this.panels.show_quality = false;
-                        cx.notify();
-                    })),
+                    .child(
+                        ui::icon_button_labeled(
+                            "toggle-lyrics-panel",
+                            "lyrics",
+                            if self.lyric_page.open {
+                                "收起歌词"
+                            } else {
+                                "展开歌词"
+                            },
+                            cx,
+                        )
+                        .when(self.lyric_page.open, |button| button.bg(rgb(0xe9edff)))
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            if this.lyric_page.open {
+                                this.close_immersive_lyrics(window, cx);
+                            } else {
+                                this.open_immersive_lyrics(window, cx);
+                            }
+                        })),
+                    )
+                    .child(
+                        ui::icon_button_labeled(
+                            "mini-player-open",
+                            "mini-player",
+                            "迷你播放器",
+                            cx,
+                        )
+                        .when(self.mini_player.is_some(), |button| {
+                            button.bg(rgb(0xe9edff))
+                        })
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.open_mini_player(window, cx)),
+                        ),
+                    )
+                    .child(self.desktop_lyrics_buttons(cx))
+                    .child(
+                        ui::icon_button("toggle-queue-panel", "list", cx)
+                            .when(self.panels.side_panel_open, |button| {
+                                button.bg(rgb(0xe9edff))
+                            })
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                if this.lyric_page.open {
+                                    this.close_immersive_lyrics(window, cx);
+                                }
+                                this.close_comments(cx);
+                                this.panels.side_panel_open = !this.panels.side_panel_open;
+                                this.panels.show_lyrics = false;
+                                this.panels.show_effects = false;
+                                this.panels.show_quality = false;
+                                cx.notify();
+                            })),
+                    ),
             );
         div()
             .relative()
@@ -269,8 +332,62 @@ impl MusicApp {
             .child(left)
             .child(transport)
             .child(tools)
+            .when(
+                !self.panels.side_panel_open
+                    && (self.panels.show_effects || self.panels.show_quality),
+                |root| root.child(self.render_player_settings(cx)),
+            )
             .when(self.panels.player_tools_open, |root| {
                 root.child(self.render_player_menu(cx))
+            })
+            .into_any_element()
+    }
+
+    fn render_player_settings(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let colors = appearance::palette(cx);
+        let quality = self.panels.show_quality;
+        div()
+            .id("player-settings-popover")
+            .absolute()
+            .bottom(px(100.))
+            .right(px(16.))
+            .w(px(340.))
+            .max_h(px(360.))
+            .overflow_y_scroll()
+            .occlude()
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .p_4()
+            .rounded_lg()
+            .bg(colors.elevated)
+            .border_1()
+            .border_color(colors.border)
+            .shadow_lg()
+            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                this.panels.show_effects = false;
+                this.panels.show_quality = false;
+                cx.notify();
+            }))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .mb_3()
+                    .child(if quality { "音质" } else { "音效" })
+                    .child(
+                        ui::icon_button("close-player-settings", "close", cx).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                this.panels.show_effects = false;
+                                this.panels.show_quality = false;
+                                cx.notify();
+                            }),
+                        ),
+                    ),
+            )
+            .child(if quality {
+                self.render_quality_panel(cx)
+            } else {
+                self.render_effects_panel(false, cx)
             })
             .into_any_element()
     }
@@ -330,36 +447,23 @@ impl MusicApp {
                             }))
                     }),
             )
-            .children(
-                ["音效", "音质", "评论"]
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, label)| {
-                        div()
-                            .id(("player-panel", index))
-                            .px_3()
-                            .py_2()
-                            .rounded_md()
-                            .cursor_pointer()
-                            .hover(|item| item.bg(rgb(0xe9edf5)))
-                            .child(label)
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                if this.lyric_page.open {
-                                    this.close_immersive_lyrics(window, cx);
-                                }
-                                this.close_comments(cx);
-                                this.panels.side_panel_open = true;
-                                this.panels.show_lyrics = false;
-                                this.panels.show_effects = index == 0;
-                                this.panels.show_quality = index == 1;
-                                this.panels.show_comments = index == 2;
-                                this.panels.player_tools_open = false;
-                                if index == 2 {
-                                    let _ = this.service.commands.send(Command::OpenComments);
-                                }
-                                cx.notify();
-                            }))
+            .child(
+                ui::icon_button_labeled("player-comments", "list", "评论", cx).on_click(
+                    cx.listener(|this, _, window, cx| {
+                        if this.lyric_page.open {
+                            this.close_immersive_lyrics(window, cx);
+                        }
+                        this.close_comments(cx);
+                        this.panels.side_panel_open = true;
+                        this.panels.show_lyrics = false;
+                        this.panels.show_effects = false;
+                        this.panels.show_quality = false;
+                        this.panels.show_comments = true;
+                        this.panels.player_tools_open = false;
+                        let _ = this.service.commands.send(Command::OpenComments);
+                        cx.notify();
                     }),
+                ),
             )
             .when_some(track.filter(|_| !self.auth.busy), |menu, id| {
                 menu.child(
@@ -391,19 +495,6 @@ impl MusicApp {
                         })),
                 )
             })
-            .child(
-                div()
-                    .id("player-mini")
-                    .px_3()
-                    .py_2()
-                    .cursor_pointer()
-                    .child("迷你播放器")
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.panels.player_tools_open = false;
-                        this.open_mini_player(window, cx);
-                    })),
-            )
-            .child(div().px_3().py_2().child(self.desktop_lyrics_buttons(cx)))
             .into_any_element()
     }
 }
