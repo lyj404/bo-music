@@ -261,6 +261,8 @@ impl MusicApp {
 
     pub(super) fn open_immersive_lyrics(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.panels.player_tools_open = false;
+        self.panels.show_effects = false;
+        self.panels.show_quality = false;
         let page = &mut self.lyric_page;
         page.open = true;
         page.restore_fullscreen = window.is_fullscreen();
@@ -272,6 +274,8 @@ impl MusicApp {
 
     pub(super) fn close_immersive_lyrics(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.lyric_poster.clear();
+        self.panels.show_effects = false;
+        self.panels.show_quality = false;
         let page = &mut self.lyric_page;
         page.open = false;
         page.backdrop.clear(window);
@@ -376,6 +380,25 @@ impl MusicApp {
                         }))
                 },
             ))
+            .children(
+                [(false, "equalizer", "音效"), (true, "quality", "音质")]
+                    .into_iter()
+                    .map(|(quality, icon, label)| {
+                        let open = if quality {
+                            self.panels.show_quality
+                        } else {
+                            self.panels.show_effects
+                        };
+                        crate::ui::icon_button_labeled(label, icon, label, cx)
+                            .when(open, |button| button.bg(rgb(0xe9edff)))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.panels.player_tools_open = false;
+                                this.panels.show_quality = quality && !open;
+                                this.panels.show_effects = !quality && !open;
+                                cx.notify();
+                            }))
+                    }),
+            )
             .child(ui_close(cx).on_click(
                 cx.listener(|this, _, window, cx| this.close_immersive_lyrics(window, cx)),
             ));
@@ -402,6 +425,7 @@ impl MusicApp {
         let lines = self.render_immersive_lines(position, cx);
         div()
             .id("immersive-lyrics")
+            .relative()
             .key_context("ImmersiveLyrics")
             .track_focus(&self.lyric_page.focus)
             .size_full()
@@ -446,6 +470,59 @@ impl MusicApp {
                     ),
             )
             .child(self.render_player_bar(compact, cx))
+            .when(
+                self.panels.show_effects || self.panels.show_quality,
+                |root| root.child(self.render_lyric_settings(cx)),
+            )
+            .into_any_element()
+    }
+
+    pub(super) fn render_lyric_settings(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let colors = crate::appearance::palette(cx);
+        let quality = self.panels.show_quality;
+        div()
+            .id("lyric-settings-popover")
+            .absolute()
+            .top(px(64.))
+            .right(px(16.))
+            .w(px(340.))
+            .max_h(px(360.))
+            .overflow_y_scroll()
+            .occlude()
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .p_4()
+            .rounded_lg()
+            .bg(colors.elevated)
+            .border_1()
+            .border_color(colors.border)
+            .shadow_lg()
+            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                this.panels.show_effects = false;
+                this.panels.show_quality = false;
+                cx.notify();
+            }))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .mb_3()
+                    .child(if quality { "音质" } else { "音效" })
+                    .child(
+                        crate::ui::icon_button("close-lyric-settings", "close", cx).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                this.panels.show_effects = false;
+                                this.panels.show_quality = false;
+                                cx.notify();
+                            }),
+                        ),
+                    ),
+            )
+            .child(if quality {
+                self.render_quality_panel(cx)
+            } else {
+                self.render_effects_panel(false, cx)
+            })
             .into_any_element()
     }
 

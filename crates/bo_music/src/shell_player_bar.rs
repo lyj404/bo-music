@@ -149,14 +149,7 @@ impl MusicApp {
                             }
                             let _ = this.service.commands.send(Command::Next);
                         },
-                    )))
-                    .child(ui::icon_button("player-more", "more", cx).on_mouse_down(
-                        gpui::MouseButton::Left,
-                        cx.listener(move |this, _, _, cx| {
-                            this.panels.player_tools_open = !menu_open;
-                            cx.notify();
-                        }),
-                    )),
+                    ))),
             )
             .child(
                 div()
@@ -192,11 +185,11 @@ impl MusicApp {
             );
         let tools = div()
             .w(px(if compact {
-                200.
+                if cfg!(windows) { 230. } else { 200. }
             } else if cfg!(windows) {
-                420.
+                390.
             } else {
-                400.
+                370.
             }))
             .flex_shrink_0()
             .flex()
@@ -207,32 +200,6 @@ impl MusicApp {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .children(
-                        [(false, "equalizer", "音效"), (true, "quality", "音质")]
-                            .into_iter()
-                            .map(|(quality, icon, label)| {
-                                let open = !self.panels.side_panel_open
-                                    && if quality {
-                                        self.panels.show_quality
-                                    } else {
-                                        self.panels.show_effects
-                                    };
-                                ui::icon_button_labeled(label, icon, label, cx)
-                                    .when(open, |button| button.bg(rgb(0xe9edff)))
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        if this.lyric_page.open {
-                                            this.close_immersive_lyrics(window, cx);
-                                        }
-                                        this.close_comments(cx);
-                                        this.panels.side_panel_open = false;
-                                        this.panels.player_tools_open = false;
-                                        this.panels.show_lyrics = false;
-                                        this.panels.show_quality = quality && !open;
-                                        this.panels.show_effects = !quality && !open;
-                                        cx.notify();
-                                    }))
-                            }),
-                    )
                     .child(ui::icon("volume", rgb(0x687083)))
                     .child(
                         div()
@@ -299,6 +266,23 @@ impl MusicApp {
                     )
                     .child(self.desktop_lyrics_buttons(cx))
                     .child(
+                        div()
+                            .relative()
+                            .child(
+                                ui::icon_button("player-more", "more", cx)
+                                    .when(self.panels.player_tools_open, |button| {
+                                        button.bg(palette.hover)
+                                    })
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.panels.player_tools_open = !menu_open;
+                                        cx.notify();
+                                    })),
+                            )
+                            .when(self.panels.player_tools_open, |anchor| {
+                                anchor.child(self.render_player_menu(cx))
+                            }),
+                    )
+                    .child(
                         ui::icon_button("toggle-queue-panel", "list", cx)
                             .when(self.panels.side_panel_open, |button| {
                                 button.bg(rgb(0xe9edff))
@@ -332,63 +316,6 @@ impl MusicApp {
             .child(left)
             .child(transport)
             .child(tools)
-            .when(
-                !self.panels.side_panel_open
-                    && (self.panels.show_effects || self.panels.show_quality),
-                |root| root.child(self.render_player_settings(cx)),
-            )
-            .when(self.panels.player_tools_open, |root| {
-                root.child(self.render_player_menu(cx))
-            })
-            .into_any_element()
-    }
-
-    fn render_player_settings(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
-        let colors = appearance::palette(cx);
-        let quality = self.panels.show_quality;
-        div()
-            .id("player-settings-popover")
-            .absolute()
-            .bottom(px(100.))
-            .right(px(16.))
-            .w(px(340.))
-            .max_h(px(360.))
-            .overflow_y_scroll()
-            .occlude()
-            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            .p_4()
-            .rounded_lg()
-            .bg(colors.elevated)
-            .border_1()
-            .border_color(colors.border)
-            .shadow_lg()
-            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                this.panels.show_effects = false;
-                this.panels.show_quality = false;
-                cx.notify();
-            }))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .mb_3()
-                    .child(if quality { "音质" } else { "音效" })
-                    .child(
-                        ui::icon_button("close-player-settings", "close", cx).on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.panels.show_effects = false;
-                                this.panels.show_quality = false;
-                                cx.notify();
-                            }),
-                        ),
-                    ),
-            )
-            .child(if quality {
-                self.render_quality_panel(cx)
-            } else {
-                self.render_effects_panel(false, cx)
-            })
             .into_any_element()
     }
 
@@ -405,8 +332,9 @@ impl MusicApp {
             .filter(|id| *id > 0);
         div()
             .absolute()
-            .bottom(px(90.))
-            .right(px(20.))
+            .bottom(px(42.))
+            .right_0()
+            .occlude()
             .w(px(250.))
             .p_3()
             .rounded_lg()
@@ -448,8 +376,15 @@ impl MusicApp {
                     }),
             )
             .child(
-                ui::icon_button_labeled("player-comments", "list", "评论", cx).on_click(
-                    cx.listener(|this, _, window, cx| {
+                div()
+                    .id("player-comments")
+                    .px_3()
+                    .py_2()
+                    .rounded_md()
+                    .cursor_pointer()
+                    .hover(|item| item.bg(rgb(0xe9edf5)))
+                    .child("评论")
+                    .on_click(cx.listener(|this, _, window, cx| {
                         if this.lyric_page.open {
                             this.close_immersive_lyrics(window, cx);
                         }
@@ -462,8 +397,7 @@ impl MusicApp {
                         this.panels.player_tools_open = false;
                         let _ = this.service.commands.send(Command::OpenComments);
                         cx.notify();
-                    }),
-                ),
+                    })),
             )
             .when_some(track.filter(|_| !self.auth.busy), |menu, id| {
                 menu.child(
