@@ -569,12 +569,19 @@ fn playlist_management_preserves_metadata_and_protects_liked_playlist() {
     service.commands.send(Command::MyPlaylists).unwrap();
     let Event::Browse(view) = wait(
         &service,
-        |event| matches!(event, Event::Browse(view) if view.my_playlists && !view.loading && matches!(&view.content, BrowseContent::Playlists(items) if items.len() == 2)),
+        |event| matches!(event, Event::Browse(view) if view.my_playlists && !view.loading && matches!(&view.content, BrowseContent::Playlists(_))),
     ) else {
         unreachable!()
     };
     let BrowseContent::Playlists(items) = view.content else {
         unreachable!()
+    };
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].id, 10);
+    let liked = Playlist {
+        id: 9,
+        name: "喜欢".into(),
+        ..items[0].clone()
     };
     service
         .commands
@@ -590,10 +597,7 @@ fn playlist_management_preserves_metadata_and_protects_liked_playlist() {
             Event::PlaylistMutationFinished(Some(PlaylistMutationResult::Created { id: 11, .. }))
         )
     });
-    service
-        .commands
-        .send(Command::OpenPlaylist(items[0].clone()))
-        .unwrap();
+    service.commands.send(Command::OpenPlaylist(liked)).unwrap();
     let Event::Browse(view) = wait(
         &service,
         |event| matches!(event, Event::Browse(view) if view.selected_playlist_id == Some(9) && !view.loading),
@@ -609,7 +613,7 @@ fn playlist_management_preserves_metadata_and_protects_liked_playlist() {
     service.commands.send(Command::BrowseBack).unwrap();
     service
         .commands
-        .send(Command::OpenPlaylist(items[1].clone()))
+        .send(Command::OpenPlaylist(items[0].clone()))
         .unwrap();
     let Event::Browse(view) = wait(
         &service,

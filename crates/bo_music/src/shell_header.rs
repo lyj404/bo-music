@@ -43,23 +43,23 @@ impl MusicApp {
                     .border_color(colors.border)
                     .flex()
                     .items_center()
-                    .px_3()
-                    .gap_2()
+                    .pl_3()
+                    .pr_1()
+                    .gap_1()
                     .when(show_search_assist, |search| {
                         search.child(gpui::deferred(self.render_search_assist(cx)).with_priority(1))
                     })
-                    .child(ui::icon("search", rgb(0x788196)))
                     .child(div().flex_1().min_w_0().child(self.search.input.clone()))
                     .child(
                         div()
                             .text_size(px(10.))
                             .text_color(rgb(0x788196))
                             .child("↵"),
+                    )
+                    .child(
+                        ui::icon_button("header-search", "search", cx)
+                            .on_click(cx.listener(|this, _, _, cx| this.run_search(cx))),
                     ),
-            )
-            .child(
-                ui::icon_button("header-search", "search", cx)
-                    .on_click(cx.listener(|this, _, _, cx| this.run_search(cx))),
             )
             .child(div().flex_1())
             .child(

@@ -27,6 +27,9 @@ impl gpui::AssetSource for Assets {
             "icons/pause.svg" => include_bytes!("../assets/icons/pause.svg"),
             "icons/next.svg" => include_bytes!("../assets/icons/next.svg"),
             "icons/previous.svg" => include_bytes!("../assets/icons/previous.svg"),
+            "icons/play-sequential.svg" => include_bytes!("../assets/icons/play-sequential.svg"),
+            "icons/repeat.svg" => include_bytes!("../assets/icons/repeat.svg"),
+            "icons/repeat-one.svg" => include_bytes!("../assets/icons/repeat-one.svg"),
             "icons/shuffle.svg" => include_bytes!("../assets/icons/shuffle.svg"),
             "icons/more.svg" => include_bytes!("../assets/icons/more.svg"),
             "icons/volume.svg" => include_bytes!("../assets/icons/volume.svg"),
@@ -57,7 +60,6 @@ pub fn icon_button(id: impl Into<gpui::ElementId>, name: &str, cx: &App) -> Stat
     let label = match name {
         "previous" => "上一首",
         "next" => "下一首",
-        "shuffle" => "切换播放模式",
         "heart" => "喜欢 / 取消喜欢",
         "more" => "更多播放选项",
         "list" => "播放队列",

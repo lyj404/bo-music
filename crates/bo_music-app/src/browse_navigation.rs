@@ -62,34 +62,29 @@ impl Browser {
                         }
                         let warning = (liked.is_err() || created.is_err())
                             .then(|| "部分歌单加载失败，请重试".to_owned());
-                        let editable = if let (Ok(liked), Ok(created)) = (&liked, &created) {
-                            let liked_id = liked.as_ref().map(|item| item.id);
-                            Some(
-                                created
-                                    .iter()
-                                    .filter_map(|item| {
-                                        (item.id > 0 && Some(item.id) != liked_id)
-                                            .then_some(item.id)
-                                    })
-                                    .collect(),
-                            )
-                        } else {
-                            None
-                        };
+                        let liked_id = liked
+                            .as_ref()
+                            .ok()
+                            .and_then(|item| item.as_ref())
+                            .map(|item| item.id);
+                        let can_edit = liked.is_ok() && created.is_ok();
                         let mut items = Vec::new();
-                        if let Ok(Some(mut liked)) = liked {
-                            liked.source_type = 5;
-                            items.push(liked);
-                        }
                         for mut item in created.unwrap_or_default() {
                             item.source_type = 5;
-                            if !items
-                                .iter()
-                                .any(|existing: &Playlist| existing.id == item.id)
+                            if Some(item.id) != liked_id
+                                && !items
+                                    .iter()
+                                    .any(|existing: &Playlist| existing.id == item.id)
                             {
                                 items.push(item);
                             }
                         }
+                        let editable = can_edit.then(|| {
+                            items
+                                .iter()
+                                .filter_map(|item| (item.id > 0).then_some(item.id))
+                                .collect()
+                        });
                         Ok(BrowseResult::Mine(items, warning, editable))
                     }
                     .await

@@ -1,4 +1,5 @@
 use super::*;
+use bo_music_domain::queue::PlayMode;
 
 impl MusicApp {
     pub(super) fn render_player_bar(
@@ -9,6 +10,12 @@ impl MusicApp {
         let rgb = appearance::paint(cx);
         let palette = appearance::palette(cx);
         let player = self.player.as_ref();
+        let (mode_icon, mode_label) = match player.map_or(PlayMode::Sequential, |p| p.mode) {
+            PlayMode::Sequential => ("play-sequential", "顺序播放"),
+            PlayMode::ListLoop => ("repeat", "列表循环"),
+            PlayMode::SingleLoop => ("repeat-one", "单曲循环"),
+            PlayMode::Shuffle => ("shuffle", "随机播放"),
+        };
         let menu_open = self.panels.player_tools_open;
         let playing = player.is_some_and(|p| p.state == PlaybackState::Playing);
         let position = player.map_or(0, |p| p.position_ms);
@@ -102,14 +109,16 @@ impl MusicApp {
                     .items_center()
                     .justify_center()
                     .gap_3()
-                    .child(ui::icon_button("mode", "shuffle", cx).on_click(cx.listener(
-                        |this, _, window, _| {
-                            if !this.lyric_page.open {
-                                window.focus(&this.playback_focus);
-                            }
-                            let _ = this.service.commands.send(Command::CycleMode);
-                        },
-                    )))
+                    .child(
+                        ui::icon_button_labeled("mode", mode_icon, mode_label, cx).on_click(
+                            cx.listener(|this, _, window, _| {
+                                if !this.lyric_page.open {
+                                    window.focus(&this.playback_focus);
+                                }
+                                let _ = this.service.commands.send(Command::CycleMode);
+                            }),
+                        ),
+                    )
                     .child(
                         ui::icon_button("previous", "previous", cx).on_click(cx.listener(
                             |this, _, window, _| {

@@ -91,7 +91,7 @@ async fn artist_albums_page_and_return_from_album_preserve_navigation() {
 }
 
 #[tokio::test]
-async fn mine_uses_account_source_deduplicates_and_rejects_stale_results() {
+async fn mine_hides_liked_playlist_deduplicates_and_rejects_stale_results() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let server = std::thread::spawn(move || {
@@ -107,7 +107,7 @@ async fn mine_uses_account_source_deduplicates_and_rejects_stale_results() {
             let body = if line.starts_with("GET /api/service/playlist/fond?") {
                 r#"{"code":200,"data":{"id":9,"name":"喜欢"}}"#
             } else if line.starts_with("GET /api/service/playlist/userCreate?") {
-                r#"{"code":200,"data":{"playLists":[{"id":9,"name":"喜欢"},{"id":10,"name":"自建"}]}}"#
+                r#"{"code":200,"data":{"playLists":[{"id":9,"name":"喜欢"},{"id":10,"name":"自建"},{"id":10,"name":"自建"}]}}"#
             } else {
                 panic!("unexpected request")
             };
@@ -140,22 +140,27 @@ async fn mine_uses_account_source_deduplicates_and_rejects_stale_results() {
     let BrowseContent::Playlists(items) = browser.view().content else {
         panic!("expected playlists")
     };
-    assert_eq!(items.len(), 2);
-    assert!(items.iter().all(|item| item.source_type == 5));
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].id, 10);
+    assert_eq!(items[0].source_type, 5);
     let revision = session.snapshot().revision;
     assert!(browser.is_mine_list(revision));
-    assert!(!browser.add_created_playlist(revision, 9, "冲突", false));
-    browser.selected = Some(Selection::Playlist(items[0].clone()));
+    assert!(!browser.add_created_playlist(revision, 10, "冲突", false));
+    browser.selected = Some(Selection::Playlist(Playlist {
+        id: 9,
+        source_type: 5,
+        ..Default::default()
+    }));
     assert!(!browser.editable_playlist(9, revision));
     assert!(browser.view().editable_playlist.is_none());
-    browser.selected = Some(Selection::Playlist(items[1].clone()));
+    browser.selected = Some(Selection::Playlist(items[0].clone()));
     assert!(browser.editable_playlist(10, revision));
     assert!(!browser.editable_playlist(10, revision + 1));
     assert!(browser.update_edited_playlist(10, revision, "新名称", "新简介", None));
     assert_eq!(browser.view().title, "新名称");
     assert!(browser.remove_deleted_playlist(10, revision));
     assert!(!browser.view().is_detail);
-    assert_eq!(browser.playlists.len(), 1);
+    assert!(browser.playlists.is_empty());
     let stale_generation = browser.generation;
     let old_revision = session.snapshot().revision;
     session.set("43".into(), "other".into());
