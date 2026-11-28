@@ -426,6 +426,7 @@ fn playlist_management_preserves_metadata_and_protects_liked_playlist() {
             Ok(())
         }
     }
+    #[track_caller]
     fn wait(service: &Service, test: impl Fn(&Event) -> bool) -> Event {
         let deadline = Instant::now() + Duration::from_secs(8);
         while Instant::now() < deadline {
@@ -496,8 +497,6 @@ fn playlist_management_preserves_metadata_and_protects_liked_playlist() {
                 }
             } else if request.starts_with("GET /api/service/playlist/userCreate?") {
                 r#"{"code":200,"data":{"playLists":[{"id":9,"name":"喜欢"},{"id":10,"name":"自建"}]}}"#
-            } else if request.starts_with("GET /api/service/playlist/9/musicList?") {
-                r#"{"code":200,"data":{"list":[]}}"#
             } else if request.starts_with("GET /api/service/playlist/10/musicList?") {
                 r#"{"code":200,"data":{"list":[{"id":501,"name":"测试歌曲"},{"id":502,"name":"第二首"}]}}"#
             } else if request.starts_with("GET /api/service/playlist/info/10?") {
@@ -600,17 +599,17 @@ fn playlist_management_preserves_metadata_and_protects_liked_playlist() {
     service.commands.send(Command::OpenPlaylist(liked)).unwrap();
     let Event::Browse(view) = wait(
         &service,
-        |event| matches!(event, Event::Browse(view) if view.selected_playlist_id == Some(9) && !view.loading),
+        |event| matches!(event, Event::Browse(view) if view.my_playlists && view.error && !view.loading),
     ) else {
         unreachable!()
     };
+    assert_eq!(view.selected_playlist_id, None);
     assert!(view.editable_playlist.is_none());
     service.commands.send(Command::DeletePlaylist(9)).unwrap();
     wait(
         &service,
         |event| matches!(event, Event::Status(message) if message.contains("歌单状态已变化")),
     );
-    service.commands.send(Command::BrowseBack).unwrap();
     service
         .commands
         .send(Command::OpenPlaylist(items[0].clone()))
